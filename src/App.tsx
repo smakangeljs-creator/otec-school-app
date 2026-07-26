@@ -1,0 +1,585 @@
+import React, { useState, useEffect } from 'react';
+import dataManager from './lib/db';
+import { AppData, Learner, ScoreRecord, PsychomotorRecord, CommentRecord, SchoolSettings } from './types';
+import Sidebar from './components/Sidebar';
+import Dashboard from './components/Dashboard';
+import Learners from './components/Learners';
+import Scores from './components/Scores';
+import ReportCard from './components/ReportCard';
+import ImportExport from './components/ImportExport';
+import Settings from './components/Settings';
+import AcademicCalendar from './components/AcademicCalendar';
+import BackupManager from './components/BackupManager';
+import AIChatbot from './components/AIChatbot';
+import NotificationCenter from './components/NotificationCenter';
+import FinanceManager from './components/FinanceManager';
+import SecurityManager from './components/SecurityManager';
+import OnboardingTour from './components/OnboardingTour';
+import SyncConflictModal from './components/SyncConflictModal';
+import { motion, AnimatePresence } from 'motion/react';
+import { Keyboard, X, Sparkles, HelpCircle, Save, Printer, ArrowRight, Menu } from 'lucide-react';
+
+export default function App() {
+  const [data, setData] = useState<AppData>(dataManager.getData());
+  const [syncState, setSyncState] = useState(dataManager.getSyncStatus());
+  const [activeUser, setActiveUser] = useState(dataManager.getActiveUser());
+  const [currentRoute, setCurrentRoute] = useState('dashboard');
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [showOnboardingTour, setShowOnboardingTour] = useState(false);
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: 'success' | 'info' | 'warning' | 'error' }>>([]);
+
+  useEffect(() => {
+    const onboardingCompleted = localStorage.getItem('otec_onboarding_completed');
+    if (onboardingCompleted !== 'true') {
+      setShowOnboardingTour(true);
+    }
+    // Perform synchronization once when the page opens
+    dataManager.syncWithCloud(true, 'page_open');
+  }, []);
+
+  const currentRouteRef = React.useRef(currentRoute);
+  useEffect(() => {
+    currentRouteRef.current = currentRoute;
+  }, [currentRoute]);
+
+  const addToast = (message: string, type: 'success' | 'info' | 'warning' | 'error' = 'info') => {
+    const id = Math.random().toString(36).slice(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 5000);
+  };
+
+  // React to reactive state updates from db synchronization engine
+  useEffect(() => {
+    const unsubscribe = dataManager.subscribe(() => {
+      setData({ ...dataManager.getData() });
+      setSyncState(dataManager.getSyncStatus());
+      setActiveUser(dataManager.getActiveUser());
+    });
+    return unsubscribe;
+  }, []);
+
+  // Listen to custom window otec-toast and route change events
+  useEffect(() => {
+    const handleCustomToast = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && detail.message) {
+        addToast(detail.message, detail.type || 'info');
+      }
+    };
+    const handleRouteChange = (e: Event) => {
+      const targetRoute = (e as CustomEvent).detail;
+      if (targetRoute) {
+        setCurrentRoute(targetRoute);
+      }
+    };
+    window.addEventListener('otec-toast', handleCustomToast);
+    window.addEventListener('otec-route-change', handleRouteChange);
+    return () => {
+      window.removeEventListener('otec-toast', handleCustomToast);
+      window.removeEventListener('otec-route-change', handleRouteChange);
+    };
+  }, []);
+
+  // Sync state observer toast trigger
+  const lastSyncState = React.useRef(syncState);
+  useEffect(() => {
+    if (syncState !== lastSyncState.current) {
+      if (syncState === 'syncing') {
+        addToast('Cloud Sync: Synchronizing with secure storage...', 'info');
+      } else if (syncState === 'synced') {
+        addToast('Cloud Sync: Database successfully updated in cloud!', 'success');
+      } else if (syncState === 'error') {
+        addToast('Cloud Sync: Database save failed. Operating on local cache.', 'warning');
+      } else if (syncState === 'offline') {
+        addToast('Cloud Sync: Working offline (local persistence active).', 'info');
+      }
+      lastSyncState.current = syncState;
+    }
+  }, [syncState]);
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleGlobalShortcuts = (e: KeyboardEvent) => {
+      // Avoid intercepting if user is typing in inputs, textareas or editables
+      const activeEl = document.activeElement;
+      const isTyping = activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        activeEl.tagName === 'TEXTAREA' || 
+        activeEl.hasAttribute('contenteditable')
+      );
+
+      // 1. Toggle Keyboard Shortcut Dialog with '?' key
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (isTyping) return;
+        e.preventDefault();
+        setShowShortcutsHelp(prev => !prev);
+        return;
+      }
+
+      // 2. Navigation Shortcuts with 'Alt' modifier
+      if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        const key = e.key.toLowerCase();
+        let targetRoute = '';
+        let routeName = '';
+
+        if (key === 'd') { targetRoute = 'dashboard'; routeName = 'Dashboard'; }
+        else if (key === 'g') { targetRoute = 'scores'; routeName = 'Grades & Comments'; }
+        else if (key === 'r') { targetRoute = 'reports'; routeName = 'Report Cards Hub'; }
+        else if (key === 'l') { targetRoute = 'learners'; routeName = 'Learners Directory'; }
+        else if (key === 'f') { targetRoute = 'finance'; routeName = 'Financial Manager'; }
+        else if (key === 'c') { targetRoute = 'calendar'; routeName = 'School Calendar'; }
+        else if (key === 's') { targetRoute = 'settings'; routeName = 'System Settings'; }
+        else if (key === 'e') { targetRoute = 'data'; routeName = 'Excel & Data Integration'; }
+
+        if (targetRoute) {
+          e.preventDefault();
+          setCurrentRoute(targetRoute);
+          addToast(`Navigated to ${routeName} Module via Alt+${key.toUpperCase()}`, 'success');
+          return;
+        }
+      }
+
+      // 3. Operational Shortcuts (Ctrl+S / Ctrl+P)
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        const key = e.key.toLowerCase();
+        if (key === 's') {
+          e.preventDefault();
+          const activeRoute = currentRouteRef.current;
+          if (activeRoute === 'scores') {
+            window.dispatchEvent(new CustomEvent('otec-shortcut-save'));
+          } else {
+            addToast('Ctrl+S is only active inside the Grades (Scores) module to commit marksheets.', 'warning');
+          }
+        } else if (key === 'p') {
+          e.preventDefault();
+          const activeRoute = currentRouteRef.current;
+          if (activeRoute === 'reports') {
+            window.dispatchEvent(new CustomEvent('otec-shortcut-print'));
+          } else {
+            addToast('Ctrl+P is active inside the Report Cards Hub to open and run printer layouts.', 'warning');
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalShortcuts);
+    return () => window.removeEventListener('keydown', handleGlobalShortcuts);
+  }, []);
+
+  const handleUpdateLearners = (newLearners: Learner[]) => {
+    dataManager.updateLearners(newLearners);
+    addToast('Student roster database updated and auto-saved.', 'success');
+  };
+
+  const handleUpdateScores = (compositeKey: string, scoreRecord: ScoreRecord) => {
+    dataManager.updateScores(compositeKey, scoreRecord);
+    addToast('Marksheet saved and updated in system.', 'success');
+  };
+
+  const handleUpdatePsychomotor = (compositeKey: string, psychoRecord: PsychomotorRecord) => {
+    dataManager.updatePsychomotor(compositeKey, psychoRecord);
+    addToast('Psychomotor skills and behavioral ratings updated.', 'success');
+  };
+
+  const handleUpdateComments = (compositeKey: string, commentRecord: CommentRecord) => {
+    dataManager.updateComments(compositeKey, commentRecord);
+    addToast('Teacher evaluation comments and initials recorded.', 'success');
+  };
+
+  const handleImportScoresBatch = (importedScores: { [key: string]: ScoreRecord }) => {
+    const updated = { ...data.scores, ...importedScores };
+    dataManager.setData({
+      ...data,
+      scores: updated
+    });
+    addToast('Successfully imported batch scoresheet from Excel!', 'success');
+  };
+
+  const handleUpdateSettings = (newSettings: SchoolSettings) => {
+    dataManager.updateSettings(newSettings);
+    addToast('System settings and grading criteria updated.', 'success');
+  };
+
+  const handleResetData = () => {
+    dataManager.resetToDefaults();
+    addToast('All local student data was reset to system defaults.', 'warning');
+  };
+
+  // Render sub page
+  const renderActivePage = () => {
+    switch (currentRoute) {
+      case 'dashboard':
+        return <Dashboard data={data} />;
+      case 'learners':
+        return (
+          <Learners 
+            data={data} 
+            onUpdateLearners={handleUpdateLearners} 
+          />
+        );
+      case 'scores':
+        return (
+          <Scores 
+            data={data}
+            onUpdateScores={handleUpdateScores}
+            onUpdatePsychomotor={handleUpdatePsychomotor}
+            onUpdateComments={handleUpdateComments}
+          />
+        );
+      case 'reports':
+        return <ReportCard data={data} />;
+      case 'data':
+        return (
+          <ImportExport 
+            data={data}
+            onUpdateLearners={handleUpdateLearners}
+            onImportScores={handleImportScoresBatch}
+            onResetData={handleResetData}
+          />
+        );
+      case 'settings':
+        return (
+          <Settings 
+            data={data} 
+            onUpdateSettings={handleUpdateSettings} 
+          />
+        );
+      case 'calendar':
+        return (
+          <AcademicCalendar 
+            data={data}
+            onUpdateSettings={handleUpdateSettings}
+          />
+        );
+      case 'finance':
+        return <FinanceManager data={data} />;
+      case 'security':
+        return (
+          <SecurityManager 
+            data={data} 
+            onUpdateSecurity={(updatedSec) => dataManager.updateSecurityData(updatedSec)} 
+          />
+        );
+      default:
+        return <Dashboard data={data} />;
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-slate-100 font-sans text-slate-800 select-none antialiased print:bg-white print:p-0 overflow-hidden">
+      {/* Mobile Sidebar Overlay */}
+      {showSidebar && (
+        <div 
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden print:hidden"
+          onClick={() => setShowSidebar(false)}
+        />
+      )}
+
+      {/* Sidebar - Hidden when printing */}
+      <div className={`print:hidden shrink-0 fixed lg:static inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out ${showSidebar ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 h-full overflow-y-auto`}>
+        <Sidebar 
+          currentRoute={currentRoute} 
+          setCurrentRoute={(route) => {
+            setCurrentRoute(route);
+            if (window.innerWidth < 1024) setShowSidebar(false);
+          }} 
+          data={data}
+          syncState={syncState}
+          user={activeUser}
+        />
+      </div>
+
+      {/* Main Workspace */}
+      <div className="flex-1 flex flex-col h-screen overflow-hidden print:overflow-visible">
+        {/* Dynamic Header - Hidden when printing */}
+        <header className="h-16 bg-white border-b border-slate-200/80 flex items-center justify-between px-4 sm:px-8 shrink-0 print:hidden shadow-xs relative z-30">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <button
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="lg:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+            >
+              <Menu size={24} />
+            </button>
+            <h2 className="text-sm sm:text-base font-bold tracking-tight text-slate-900 truncate max-w-[150px] sm:max-w-none">
+              {currentRoute === 'dashboard' && 'Dashboard Analytics'}
+              {currentRoute === 'learners' && 'Learners Directory'}
+              {currentRoute === 'scores' && 'Grades & Comments Entry'}
+              {currentRoute === 'reports' && 'Report Cards Hub'}
+              {currentRoute === 'finance' && 'School Finances & Accounting Ledgers'}
+              {currentRoute === 'calendar' && 'School Calendar & Events Planner'}
+              {currentRoute === 'data' && 'Excel & Data Integration'}
+              {currentRoute === 'settings' && 'System Settings'}
+            </h2>
+            <div className="flex items-center gap-2">
+              <select
+                value={data.settings.term}
+                onChange={(e) => {
+                  handleUpdateSettings({
+                    ...data.settings,
+                    term: e.target.value
+                  });
+                }}
+                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200/60 text-slate-700 text-xs font-bold rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-600 cursor-pointer shadow-xs transition-colors"
+              >
+                <option value="Term 1">Term 1</option>
+                <option value="Term 2">Term 2</option>
+                <option value="Term 3">Term 3</option>
+              </select>
+              <span className="hidden sm:inline px-2.5 py-1 bg-slate-50 border border-slate-200/50 text-slate-500 text-xs font-semibold rounded-lg uppercase tracking-wider">
+                {data.settings.year}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button 
+              onClick={() => setCurrentRoute('data')}
+              className="hidden sm:block px-3.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              Import/Export
+            </button>
+            <button 
+              onClick={() => setCurrentRoute('reports')}
+              className="px-2.5 py-1.5 sm:px-3.5 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition-colors shadow-xs shadow-blue-600/10 cursor-pointer"
+            >
+              <span className="hidden sm:inline">Generate Reports</span>
+              <span className="sm:hidden">Reports</span>
+            </button>
+            <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 font-bold text-xs text-slate-600 flex items-center justify-center shrink-0">
+              {activeUser ? activeUser.email?.slice(0, 2).toUpperCase() : 'GS'}
+            </div>
+          </div>
+        </header>
+
+        {/* Dynamic Workspace Panel */}
+        <main className="flex-1 p-4 sm:p-8 overflow-y-auto max-w-[1400px] w-full mx-auto print:p-0 print:overflow-visible">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentRoute}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              className="h-full w-full"
+            >
+              {renderActivePage()}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+        
+        {/* Background Periodic Backup Trigger */}
+        <BackupManager data={data} backgroundOnly={true} />
+        
+        {/* Floating AI Consultant Chatbot */}
+        <AIChatbot data={data} />
+
+        {/* Floating System Notification Log Center */}
+        <NotificationCenter />
+
+        {/* Floating Keyboard Shortcuts Guide Trigger */}
+        <div className="fixed bottom-36 right-6 z-50 print:hidden">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowShortcutsHelp(true)}
+            className="w-10 h-10 rounded-full bg-slate-900 text-slate-100 hover:text-white flex items-center justify-center shadow-xl border border-slate-800 hover:bg-slate-950 transition-all cursor-pointer group"
+            title="Keyboard Shortcuts (Press '?')"
+          >
+            <Keyboard size={18} className="group-hover:rotate-12 transition-transform duration-300" />
+          </motion.button>
+        </div>
+
+        {/* Floating Onboarding Tour Trigger */}
+        <div className="fixed bottom-48 right-6 z-50 print:hidden">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setShowOnboardingTour(true)}
+            className="w-10 h-10 rounded-full bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center shadow-xl border border-blue-500 hover:border-blue-600 transition-all cursor-pointer group animate-pulse hover:animate-none"
+            title="Interactive Onboarding Tour Guide"
+          >
+            <HelpCircle size={18} className="group-hover:rotate-12 transition-transform duration-300" />
+          </motion.button>
+        </div>
+      </div>
+
+      {/* Keyboard Shortcuts Interactive Guide Overlay */}
+      <AnimatePresence>
+        {showShortcutsHelp && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowShortcutsHelp(false)}
+              className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[99999] print:hidden"
+            />
+
+            {/* Panel Card */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', duration: 0.35 }}
+              className="fixed inset-0 m-auto max-w-lg h-fit max-h-[85vh] bg-white border border-slate-200 rounded-3xl shadow-2xl z-[100000] flex flex-col overflow-hidden print:hidden"
+            >
+              {/* Header */}
+              <div className="bg-slate-900 text-white p-5 flex items-center justify-between border-b border-slate-800 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-slate-800 rounded-xl text-amber-400">
+                    <Keyboard size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black tracking-tight text-white">System Keyboard Shortcuts Map</h3>
+                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Accelerate your administrative workflows</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowShortcutsHelp(false)}
+                  className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-5 text-slate-800">
+                
+                {/* Navigation Section */}
+                <div className="space-y-2.5">
+                  <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1 flex items-center gap-1.5">
+                    <Sparkles size={11} className="text-amber-500" />
+                    Global Navigation Shortcuts (Alt Modifiers)
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {[
+                      { key: 'D', desc: 'Dashboard Analytics' },
+                      { key: 'G', desc: 'Grades & Comments' },
+                      { key: 'R', desc: 'Report Cards Hub' },
+                      { key: 'L', desc: 'Learners Directory' },
+                      { key: 'F', desc: 'Financial Manager' },
+                      { key: 'C', desc: 'School Calendar' },
+                      { key: 'S', desc: 'System Settings' },
+                      { key: 'E', desc: 'Excel & Data Integration' },
+                    ].map(item => (
+                      <div key={item.key} className="flex items-center justify-between p-2 bg-slate-50 border border-slate-200/60 rounded-xl text-xs">
+                        <span className="font-semibold text-slate-600">{item.desc}</span>
+                        <div className="flex items-center gap-0.5">
+                          <kbd className="px-1.5 py-0.5 bg-white border border-slate-300 text-[10px] font-bold rounded shadow-xs text-slate-500">Alt</kbd>
+                          <span className="text-[10px] text-slate-300 font-bold">+</span>
+                          <kbd className="px-1.5 py-0.5 bg-white border border-slate-300 text-[10px] font-black rounded shadow-xs text-slate-800">{item.key}</kbd>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Operations Section */}
+                <div className="space-y-2.5">
+                  <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1 flex items-center gap-1.5">
+                    <HelpCircle size={11} className="text-blue-500" />
+                    Context-Aware Core Operations
+                  </h4>
+                  
+                  <div className="space-y-2">
+                    {/* Ctrl+S */}
+                    <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-start justify-between gap-4 text-xs">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <Save size={12} className="text-blue-600" />
+                          <span className="font-black text-blue-900">Commit Marksheet Draft</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
+                          Saves all local grades, comments, psychomotor ratings, and teacher initials inside the <span className="text-slate-800">Grades &amp; Comments (Scores)</span> module.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
+                        <kbd className="px-1.5 py-0.5 bg-white border border-blue-200 text-[10px] font-bold rounded shadow-xs text-blue-700">Ctrl</kbd>
+                        <span className="text-[10px] text-blue-300 font-bold">+</span>
+                        <kbd className="px-1.5 py-0.5 bg-white border border-blue-200 text-[10px] font-black rounded shadow-xs text-blue-900">S</kbd>
+                      </div>
+                    </div>
+
+                    {/* Ctrl+P */}
+                    <div className="p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl flex items-start justify-between gap-4 text-xs">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <Printer size={12} className="text-emerald-600" />
+                          <span className="font-black text-emerald-900">Print Student Report Card</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
+                          Launches the printing overlay and exports standard PDF copies inside the <span className="text-slate-800">Report Cards Hub</span> module.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
+                        <kbd className="px-1.5 py-0.5 bg-white border border-emerald-200 text-[10px] font-bold rounded shadow-xs text-emerald-700">Ctrl</kbd>
+                        <span className="text-[10px] text-emerald-300 font-bold">+</span>
+                        <kbd className="px-1.5 py-0.5 bg-white border border-emerald-200 text-[10px] font-black rounded shadow-xs text-emerald-900">P</kbd>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Close Info Footer */}
+                <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  <span>Press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 text-slate-600 rounded">?</kbd> to toggle panel</span>
+                  <button
+                    onClick={() => setShowShortcutsHelp(false)}
+                    className="text-blue-600 hover:text-blue-700 hover:underline cursor-pointer flex items-center gap-1 bg-transparent border-0"
+                  >
+                    <span>Got it</span>
+                    <ArrowRight size={10} />
+                  </button>
+                </div>
+
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Multi-Browser Concurrency Conflict Side-by-Side Modal */}
+      <SyncConflictModal />
+
+      {/* Onboarding Tour Interactive Modal */}
+      <OnboardingTour 
+        currentRoute={currentRoute} 
+        setCurrentRoute={setCurrentRoute} 
+        isOpen={showOnboardingTour} 
+        onClose={() => setShowOnboardingTour(false)} 
+      />
+
+      {/* Floating Toast Notifications Overlay */}
+      <div className="fixed bottom-6 right-6 z-[99999] flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto p-4 rounded-2xl shadow-xl border flex items-center gap-3 transition-all duration-300 animate-slide-up-fade text-xs font-bold leading-relaxed ${
+              toast.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-800 shadow-emerald-500/10' :
+              toast.type === 'warning' ? 'bg-amber-50 border-amber-100 text-amber-800 shadow-amber-500/10' :
+              toast.type === 'error' ? 'bg-rose-50 border-rose-100 text-rose-800 shadow-rose-500/10' :
+              'bg-slate-900 border-slate-800 text-white shadow-slate-900/20'
+            }`}
+          >
+            <span className="text-sm shrink-0">
+              {toast.type === 'success' && '✅'}
+              {toast.type === 'warning' && '⚠️'}
+              {toast.type === 'error' && '❌'}
+              {toast.type === 'info' && 'ℹ️'}
+            </span>
+            <div className="flex-1">{toast.message}</div>
+            <button
+              onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+              className="text-slate-400 hover:text-slate-600 font-bold ml-1 hover:scale-110 cursor-pointer"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

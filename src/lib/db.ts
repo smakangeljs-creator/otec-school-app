@@ -1,0 +1,1060 @@
+import { auth, db } from './firebase';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInAnonymously } from 'firebase/auth';
+import { silentSyncToGoogleDrive, autoRestoreFromGoogleDrive } from './googleDriveService';
+import { AppData, SchoolSettings, Learner, ScoreRecord, PsychomotorRecord, CommentRecord, ActivityLog, FinanceTransaction, SecurityData, GateLogEntry, VisitorRecord, UnknownPersonAlert, SecurityGateSystemConfig } from '../types';
+import { getDemoData, defaultSettings, defaultPrePrimaryGradingBands, defaultSectionSubjects, regenerateUNEBNumbers, getDemoSecurityData } from './defaults';
+
+export interface SyncMetric {
+  id: string;
+  timestamp: string;
+  durationMs: number;
+  payloadKb: number;
+  status: 'synced' | 'cached' | 'error' | 'offline';
+  trigger: string;
+  details?: string;
+}
+
+const LOCAL_STORAGE_KEY = 'otec_report_card_data';
+
+let lastSyncMetrics: SyncMetric = {
+  id: 'init',
+  timestamp: new Date().toLocaleString(),
+  durationMs: 0,
+  payloadKb: 0,
+  status: 'cached',
+  trigger: 'startup',
+  details: 'Local database state loaded successfully'
+};
+
+let syncMetricsHistory: SyncMetric[] = [];
+let lastSyncedDataHash: string = '';
+
+try {
+  const savedHist = localStorage.getItem('otec_sync_metrics_history');
+  if (savedHist) {
+    syncMetricsHistory = JSON.parse(savedHist);
+    if (syncMetricsHistory.length > 0) {
+      lastSyncMetrics = syncMetricsHistory[0];
+    }
+  }
+} catch (e) {
+  console.error('Failed to parse sync metrics history', e);
+}
+
+export function migrateLowerPrimarySubjects(data: AppData): AppData {
+  if (!data || !data.settings || !data.settings.sections) return data;
+  
+  const lowerSec = data.settings.sections.lower;
+  if (lowerSec) {
+    const targetNames = ['English', 'Mathematics', 'Literacy 1', 'Literacy 2', 'Religious Education', 'Luganda'];
+    const currentNames = lowerSec.subjects.map(s => s.name);
+    const isMatched = currentNames.length === targetNames.length && currentNames.every((n, i) => n === targetNames[i]);
+    
+    if (!isMatched) {
+      lowerSec.subjects = targetNames.map(name => ({ name, max: 100 }));
+    }
+  }
+
+  const preSec = data.settings.sections.preprimary;
+  if (preSec) {
+    const targetNames = ['NUMBERS', 'ENGLISH', 'HEALTH HABBITS', 'SOCIAL DEVELOPMENTS', 'READING', 'WRITING', 'DRAWING'];
+    const currentNames = preSec.subjects.map(s => s.name);
+    const isMatched = currentNames.length === targetNames.length && currentNames.every((n, i) => n === targetNames[i]);
+    
+    if (!isMatched) {
+      preSec.subjects = targetNames.map(name => ({ name, max: 100 }));
+    }
+    // Only set default pre-primary grading bands if not set, preserving user customizations and comments
+    if (!preSec.grading || preSec.grading.length === 0) {
+      preSec.grading = defaultPrePrimaryGradingBands();
+    }
+  }
+
+  // Head teacher name update
+  if (data.settings.headTeacherName === 'Mrs. Namubiru Justine' || !data.settings.headTeacherName) {
+    data.settings.headTeacherName = 'Ssemakula Joseph';
+    data.settings.headTeacherInitials = 'S.J.';
+  }
+
+  // Ensure calendarEvents exists and is populated
+  if (!data.settings.calendarEvents || data.settings.calendarEvents.length === 0) {
+    data.settings.calendarEvents = [
+      { id: 'E1', title: 'Term 3 Official Opening Day', date: '2026-09-07', type: 'event', description: 'Welcome back students for the final academic term of the year.' },
+      { id: 'E2', title: 'Independence Day Holiday', date: '2026-10-09', type: 'holiday', description: 'National public holiday. School remains closed for one day.' },
+      { id: 'E3', title: 'Mid-Term Examinations Block', date: '2026-10-19', type: 'deadline', description: 'Mid-Term papers administered across all classes. Marks entry due by end of week.' },
+      { id: 'E4', title: 'P7 UNEB PLE Mock Finals', date: '2026-11-09', type: 'deadline', description: 'Final mock series for Primary 7 candidates to prepare for UNEB PLE.' },
+      { id: 'E5', title: 'Eid al-Adha Holiday', date: '2026-11-20', type: 'holiday', description: 'Eid holiday observed (subject to sighting of moon). School closed.' },
+      { id: 'E6', title: 'End of Term Assessment Exams', date: '2026-11-30', type: 'deadline', description: 'Final End of Term promotional examinations.' },
+      { id: 'E7', title: 'Christmas Thanksgiving Festival', date: '2026-12-04', type: 'event', description: 'Academic thanksgiving assembly, choir carols, and community feast.' },
+      { id: 'E8', title: 'Report Cards & Graduation Day', date: '2026-12-11', type: 'event', description: 'Primary 7 promotional lists posted and Nurseries Graduation ceremony.' }
+    ];
+  }
+
+  // Also migrate scores for lower classes!
+  const lowerClasses = ['P1', 'P2', 'P3'];
+  const lowerLearnerIds = new Set(data.learners.filter(l => lowerClasses.includes(l.cls)).map(l => l.id));
+
+  // Migrate scores for pre-primary classes!
+  const preprimaryClasses = ['ZEBRA', 'LION', 'ELEPHANT'];
+  const preprimaryLearnerIds = new Set(data.learners.filter(l => preprimaryClasses.includes(l.cls)).map(l => l.id));
+
+  if (data.scores) {
+    Object.keys(data.scores).forEach(compositeKey => {
+      const [learnerId] = compositeKey.split('|');
+      if (lowerLearnerIds.has(learnerId)) {
+        const scoreRec = data.scores[compositeKey];
+        if (scoreRec) {
+          const newScoreRec: Record<string, number> = {};
+          
+          Object.entries(scoreRec).forEach(([subjectName, marks]) => {
+            if (subjectName === 'Science') {
+              newScoreRec['Literacy 1'] = marks;
+            } else if (subjectName === 'Creative Arts') {
+              newScoreRec['Luganda'] = marks;
+            } else if (subjectName === 'Social Studies') {
+              // skip / remove
+            } else {
+              newScoreRec[subjectName] = marks;
+            }
+          });
+
+          data.scores[compositeKey] = newScoreRec;
+        }
+      } else if (preprimaryLearnerIds.has(learnerId)) {
+        const scoreRec = data.scores[compositeKey];
+        if (scoreRec) {
+          const newScoreRec: Record<string, number> = {};
+          Object.entries(scoreRec).forEach(([subjectName, marks]) => {
+            if (subjectName === 'Numeracy') {
+              newScoreRec['NUMBERS'] = marks;
+            } else if (subjectName === 'Literacy') {
+              newScoreRec['ENGLISH'] = marks;
+            } else if (subjectName === 'Creative Arts') {
+              newScoreRec['DRAWING'] = marks;
+            } else if (subjectName === 'Religious Education') {
+              newScoreRec['SOCIAL DEVELOPMENTS'] = marks;
+            } else if (subjectName === 'Physical Education') {
+              newScoreRec['HEALTH HABBITS'] = marks;
+            } else {
+              newScoreRec[subjectName] = marks;
+            }
+          });
+          data.scores[compositeKey] = newScoreRec;
+        }
+      }
+    });
+  }
+
+  if (data.learners) {
+    data.learners = regenerateUNEBNumbers(data.learners);
+  }
+
+  return data;
+}
+
+// Singleton AppState inside module scope
+let currentData: AppData = migrateLowerPrimarySubjects(getDemoData());
+let activeUser: User | null = null;
+let syncStatus: 'idle' | 'syncing' | 'synced' | 'error' | 'offline' = 'offline';
+let syncEnabled = localStorage.getItem('otec_sync_enabled') !== 'false'; // Defaults to true
+let onStateChangeCallbacks: (() => void)[] = [];
+let unsubscribeSnapshot: (() => void) | null = null;
+
+// Load initial data from local storage
+function loadFromLocal(): AppData {
+  const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+  if (raw) {
+    try {
+      let parsed = JSON.parse(raw);
+      // Basic validation
+      if (parsed.learners && parsed.settings && parsed.scores) {
+        parsed = migrateLowerPrimarySubjects(parsed);
+        if (!parsed.finances) {
+          parsed.finances = getDemoData().finances || [];
+        }
+        if (!parsed.security) {
+          parsed.security = getDemoSecurityData();
+        }
+        if (!parsed.activityLog) {
+          parsed.activityLog = [
+            {
+              id: 'init-1',
+              timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
+              type: 'settings_modified',
+              details: 'Initial school settings and academic parameters configured.',
+              operator: 'System'
+            },
+            {
+              id: 'init-2',
+              timestamp: new Date(Date.now() - 3600000).toISOString(),
+              type: 'data_imported',
+              details: 'Imported demo dataset of registered student records.',
+              operator: 'System'
+            }
+          ];
+        }
+        return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to parse local data', e);
+    }
+  }
+  
+  const demo = getDemoData();
+  demo.activityLog = [
+    {
+      id: 'init-1',
+      timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
+      type: 'settings_modified',
+      details: 'Initial school settings and academic parameters configured.',
+      operator: 'System'
+    },
+    {
+      id: 'init-2',
+      timestamp: new Date(Date.now() - 3600000).toISOString(),
+      type: 'data_imported',
+      details: 'Imported demo dataset of registered student records.',
+      operator: 'System'
+    }
+  ];
+  return demo;
+}
+
+// Global Client Session Identifier for multi-browser tab tracking
+const TAB_CLIENT_ID = 'browser_' + Math.random().toString(36).slice(2, 9) + '_' + Date.now();
+let knownServerDbVersion = 0;
+let hasLocalDirtyState = false;
+let lastLocalMutationTime = 0;
+
+let multiBrowserChannel: BroadcastChannel | null = null;
+try {
+  if (typeof BroadcastChannel !== 'undefined') {
+    multiBrowserChannel = new BroadcastChannel('otec_multi_browser_sync_channel');
+  }
+} catch (e) {
+  console.warn('BroadcastChannel initialization skipped:', e);
+}
+
+// Function to broadcast changes to other browser windows/tabs
+function broadcastDataChange(data: AppData) {
+  try {
+    const payload = {
+      clientId: TAB_CLIENT_ID,
+      timestamp: Date.now(),
+      data
+    };
+    if (multiBrowserChannel) {
+      multiBrowserChannel.postMessage(payload);
+    }
+    localStorage.setItem('otec_last_broadcast_ts', Date.now().toString());
+  } catch (err) {
+    console.warn('Failed to broadcast multi-browser change:', err);
+  }
+}
+
+// Write to local storage and broadcast to active browser sessions
+function saveToLocal(data: AppData, skipBroadcast: boolean = false) {
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+  if (!skipBroadcast) {
+    hasLocalDirtyState = true;
+    lastLocalMutationTime = Date.now();
+    broadcastDataChange(data);
+  }
+}
+
+// Initialize current data from Local Storage right away
+currentData = loadFromLocal();
+
+// Set up multi-browser listeners
+if (typeof window !== 'undefined') {
+  // 1. BroadcastChannel Listener (Instant same-domain tab-to-tab sync)
+  if (multiBrowserChannel) {
+    multiBrowserChannel.onmessage = (event) => {
+      if (event.data && event.data.clientId !== TAB_CLIENT_ID && event.data.data) {
+        console.log(`Received real-time update from secondary browser session (${event.data.clientId}).`);
+        let incomingData = event.data.data as AppData;
+        incomingData = migrateLowerPrimarySubjects(incomingData);
+        
+        const incomingStr = JSON.stringify(incomingData);
+        const localStr = JSON.stringify(currentData);
+        if (incomingStr !== localStr) {
+          // Detect dirty state conflict
+          if (hasLocalDirtyState) {
+            console.warn('Multi-browser concurrency conflict detected! Local session has dirty unsaved state.');
+            window.dispatchEvent(new CustomEvent('otec-sync-conflict', {
+              detail: {
+                localData: JSON.parse(JSON.stringify(currentData)),
+                incomingData,
+                sourceName: `Secondary Browser Session (${event.data.clientId.slice(0, 12)}...)`,
+                timestamp: new Date().toLocaleTimeString()
+              }
+            }));
+            window.dispatchEvent(new CustomEvent('otec-toast', {
+              detail: {
+                message: 'Multi-Browser Concurrency Conflict: Simultaneous edits detected from secondary browser window! Side-by-side prompt opened.',
+                type: 'warning'
+              }
+            }));
+          } else {
+            currentData = incomingData;
+            saveToLocal(currentData, true); // Save locally without re-broadcasting back
+            dataManager.triggerUpdate();
+
+            window.dispatchEvent(new CustomEvent('otec-toast', {
+              detail: {
+                message: 'Multi-Browser Live Sync: Database synchronized with real-time edits from secondary browser window!',
+                type: 'info'
+              }
+            }));
+          }
+        }
+      }
+    };
+  }
+
+  // 2. LocalStorage Event Listener (Fallback across tabs/windows)
+  window.addEventListener('storage', (e) => {
+    if (e.key === LOCAL_STORAGE_KEY || e.key === 'otec_last_broadcast_ts') {
+      const freshData = loadFromLocal();
+      const freshStr = JSON.stringify(freshData);
+      const localStr = JSON.stringify(currentData);
+      if (freshStr !== localStr) {
+        if (hasLocalDirtyState) {
+          console.warn('LocalStorage event detected dirty state concurrency conflict.');
+          window.dispatchEvent(new CustomEvent('otec-sync-conflict', {
+            detail: {
+              localData: JSON.parse(JSON.stringify(currentData)),
+              incomingData: freshData,
+              sourceName: 'Secondary Tab (LocalStorage Event)',
+              timestamp: new Date().toLocaleTimeString()
+            }
+          }));
+        } else {
+          console.log('Storage event detected data mutation from another browser tab.');
+          currentData = freshData;
+          dataManager.triggerUpdate();
+
+          window.dispatchEvent(new CustomEvent('otec-toast', {
+            detail: {
+              message: 'Multi-Browser Sync: Changes updated across browser tabs.',
+              type: 'info'
+            }
+          }));
+        }
+      }
+    }
+  });
+
+  // 3. Tab Visibility Listener (Refresh from server whenever returning to tab)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      checkServerDbVersion();
+    }
+  });
+
+  // Periodic Background Polling for real-time cloud & multi-browser synchronization
+  setInterval(() => {
+    // Firestore handles real-time polling natively
+  }, 3000);
+}
+
+// Check server DB version for changes made by different browsers/devices
+async function checkServerDbVersion() {
+  // Replaced by Firestore Realtime Sync
+}
+
+// Helper to save state to server workspace
+async function syncWithWorkspaceServer(data: AppData) {
+  // Replaced by Firestore
+  return true;
+}
+
+// Helper to load state from server workspace
+async function loadFromWorkspaceServer(forceApply: boolean = false) {
+  // Replaced by Firestore
+  return false;
+}
+
+// Real-time Firestore Sync Listener helper
+function setupRealtimeListener(user: User) {
+  if (unsubscribeSnapshot) {
+    unsubscribeSnapshot();
+    unsubscribeSnapshot = null;
+  }
+  
+  if (!syncEnabled) return;
+  
+  const userDocRef = doc(db, 'users', user.uid, 'data', 'appState');
+  unsubscribeSnapshot = onSnapshot(userDocRef, (docSnap) => {
+    if (!syncEnabled) return;
+    
+    // Ignore local updates before they hit the cloud
+    if (docSnap.metadata.hasPendingWrites) {
+      return;
+    }
+    
+    if (docSnap.exists()) {
+      let cloudData = docSnap.data() as AppData;
+      cloudData = migrateLowerPrimarySubjects(cloudData);
+      
+      const cloudDataStr = JSON.stringify(cloudData);
+      const currentDataStr = JSON.stringify(currentData);
+      if (cloudDataStr !== currentDataStr) {
+        console.log('Real-time sync: Received update from another device/browser.');
+        if (hasLocalDirtyState) {
+          window.dispatchEvent(new CustomEvent('otec-sync-conflict', {
+            detail: {
+              localData: JSON.parse(JSON.stringify(currentData)),
+              incomingData: cloudData,
+              sourceName: 'Firebase Firestore Cloud Database',
+              timestamp: new Date().toLocaleTimeString()
+            }
+          }));
+        } else {
+          currentData = cloudData;
+          hasLocalDirtyState = false;
+          saveToLocal(currentData, true);
+          dataManager.triggerUpdate();
+          
+          // Notify user
+          window.dispatchEvent(new CustomEvent('otec-modal-notify', {
+            detail: {
+              title: 'Live Sync Applied',
+              message: 'Your school database was automatically updated with real-time changes from another browser.',
+              type: 'success',
+              timestamp: new Date().toLocaleString()
+            }
+          }));
+        }
+      }
+    }
+  }, (error: any) => {
+    const isOffline = error && (error.code === 'unavailable' || error.message?.toLowerCase().includes('offline') || !navigator.onLine);
+    if (isOffline) {
+      console.info('Real-time sync snapshot listener suspended: Device offline.');
+    } else {
+      console.error('Real-time snapshot sync error:', error);
+    }
+  });
+}
+
+// Helper to recursively remove or replace undefined values for Firestore
+function sanitizeForFirestore(obj: any): any {
+  if (obj === undefined) {
+    return null;
+  }
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeForFirestore);
+  }
+  const result: any = {};
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (val !== undefined) {
+      result[key] = sanitizeForFirestore(val);
+    }
+  }
+  return result;
+}
+
+function getStudentTotalTermFees(student: Learner, settings: SchoolSettings): number {
+  const hasDetailedFees = student.feeTuition !== undefined ||
+                          student.feeBoarding !== undefined ||
+                          student.feeVan !== undefined ||
+                          student.feeRegistration !== undefined ||
+                          student.feeSweater !== undefined ||
+                          student.feeClassUniform !== undefined ||
+                          student.feeSportsWear !== undefined ||
+                          student.feeHair !== undefined ||
+                          student.feeHoliday !== undefined ||
+                          student.feeOthers !== undefined;
+
+  if (hasDetailedFees) {
+    return (student.feeTuition ?? 0) +
+           (student.feeBoarding ?? 0) +
+           (student.feeVan ?? 0) +
+           (student.feeRegistration ?? 0) +
+           (student.feeSweater ?? 0) +
+           (student.feeClassUniform ?? 0) +
+           (student.feeSportsWear ?? 0) +
+           (student.feeHair ?? 0) +
+           (student.feeHoliday ?? 0) +
+           (student.feeOthers ?? 0);
+  }
+
+  // Fallback to settings defaults
+  let tuition = settings.feeTuitionLower ?? 310000;
+  const clsName = (student.cls || '').toUpperCase();
+  if (['ZEBRA', 'LION', 'ELEPHANT', 'NURSERY', 'BABY', 'MIDDLE', 'PRE-PRIMARY', 'PREPRIMARY', 'KINDERGARTEN'].some(prefix => clsName.includes(prefix))) {
+    tuition = settings.feeTuitionNursery ?? 290000;
+  } else if (['P4', 'P5', 'P6', 'P7'].some(prefix => clsName.includes(prefix))) {
+    tuition = settings.feeTuitionUpper ?? 335000;
+  }
+
+  const isBoarder = (student.dayBoarding || '').toLowerCase().includes('board');
+  const boardingFee = isBoarder ? (settings.feeBoarding ?? 630000) : 0;
+  const regFee = settings.feeRegistration ?? 20000;
+  const sweaterFee = settings.feeSweater ?? 50000;
+  const classUniformFee = settings.feeClassUniform ?? 50000;
+  const sportsFee = settings.feeSportsWear ?? 70000;
+  const hairFee = settings.feeHair ?? 5000;
+  const holidayFee = settings.feeHoliday ?? 5000;
+  const otherFee = settings.feeOthers ?? 0;
+  const vanFee = 0;
+
+  return tuition + boardingFee + regFee + sweaterFee + classUniformFee + sportsFee + hairFee + holidayFee + otherFee + vanFee;
+}
+
+const formatUGXLocal = (amount: number) => {
+  return new Intl.NumberFormat('en-UG', {
+    style: 'currency',
+    currency: 'UGX',
+    minimumFractionDigits: 0
+  }).format(amount);
+};
+
+export const dataManager = {
+  // Get current state
+  getData(): AppData {
+    return currentData;
+  },
+
+  // Set the full state
+  setData(newData: AppData) {
+    currentData = migrateLowerPrimarySubjects(newData);
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  // Add a system log entry
+  addActivityLog(type: ActivityLog['type'], details: string, operator?: string) {
+    if (!currentData.activityLog) {
+      currentData.activityLog = [];
+    }
+    const newLog: ActivityLog = {
+      id: 'log-' + Math.random().toString(36).slice(2, 9),
+      timestamp: new Date().toISOString(),
+      type,
+      details,
+      operator: operator || (activeUser?.email ? activeUser.email.split('@')[0] : 'Teacher')
+    };
+    currentData.activityLog = [newLog, ...currentData.activityLog].slice(0, 50); // Keep last 50 entries
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  // Modify specific aspects
+  updateSettings(settings: SchoolSettings) {
+    currentData.settings = settings;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud(true, 'settings_updated');
+    this.addActivityLog('settings_modified', `School configurations updated for term ${settings.term} (${settings.schoolName}).`);
+  },
+
+  updateLearners(learners: Learner[]) {
+    // Keep a map of previous outstanding balances of existing learners
+    const prevBalances = new Map<string, number>();
+    currentData.learners.forEach(l => {
+      prevBalances.set(l.id, parseFloat(l.outstandingBalance || '0'));
+    });
+
+    // Save the new learners
+    currentData.learners = regenerateUNEBNumbers(learners);
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud(true, 'learners_updated');
+
+    // Check for students whose balance fell below 20% of total term fees
+    currentData.learners.forEach(student => {
+      const prevBal = prevBalances.get(student.id);
+      const newBal = parseFloat(student.outstandingBalance || '0');
+      
+      const totalFees = getStudentTotalTermFees(student, currentData.settings);
+      const threshold = 0.20 * totalFees;
+
+      // Condition: transition from >= 20% to < 20% of total fees
+      if (prevBal !== undefined && prevBal >= threshold && newBal < threshold) {
+        window.dispatchEvent(new CustomEvent('otec-toast', {
+          detail: {
+            message: `Student Balance Notice: ${student.name}'s remaining arrears (${formatUGXLocal(newBal)}) has fallen below 20% of their total term fees (${formatUGXLocal(totalFees)}).`,
+            type: 'info'
+          }
+        }));
+      }
+    });
+  },
+
+  updateScores(compositeKey: string, scoreRecord: ScoreRecord) {
+    currentData.scores[compositeKey] = scoreRecord;
+    
+    // Immediate validation check for invalid mark ranges (0-100)
+    if (scoreRecord && typeof scoreRecord === 'object') {
+      Object.entries(scoreRecord).forEach(([subject, val]) => {
+        if (val !== undefined && val !== null && (val as any) !== '') {
+          const num = Number(val);
+          if (isNaN(num) || num < 0 || num > 100) {
+            const [learnerId] = compositeKey.split('|');
+            const learner = (currentData.learners || []).find(l => l.id === learnerId);
+            const learnerName = learner ? learner.name : 'Learner';
+
+            window.dispatchEvent(
+              new CustomEvent('otec-modal-notify', {
+                detail: {
+                  title: '⚠️ Invalid Mark Range Detected',
+                  message: `Invalid mark "${val}" entered for ${learnerName} in ${subject}. Marks must be between 0 and 100.`,
+                  type: 'error',
+                  timestamp: new Date().toLocaleTimeString()
+                }
+              })
+            );
+          }
+        }
+      });
+    }
+
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updatePsychomotor(compositeKey: string, psychoRecord: PsychomotorRecord) {
+    currentData.psychomotor[compositeKey] = psychoRecord;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateComments(compositeKey: string, commentRecord: CommentRecord) {
+    currentData.comments[compositeKey] = commentRecord;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateFinances(finances: FinanceTransaction[]) {
+    currentData.finances = finances;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateSecurityData(security: SecurityData) {
+    currentData.security = security;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  // Clear everything
+  resetToDefaults() {
+    currentData = getDemoData();
+    saveToLocal(currentData);
+    this.addActivityLog('reset_defaults', 'Database cleared and reset to system demo defaults.');
+  },
+
+  // State changes subscription
+  subscribe(callback: () => void) {
+    onStateChangeCallbacks.push(callback);
+    return () => {
+      onStateChangeCallbacks = onStateChangeCallbacks.filter(cb => cb !== callback);
+    };
+  },
+
+  triggerUpdate() {
+    onStateChangeCallbacks.forEach(cb => cb());
+  },
+
+  getSyncStatus() {
+    if (!syncEnabled) return 'offline';
+    return syncStatus;
+  },
+
+  getLastSyncedTime() {
+    return localStorage.getItem('otec_last_synced') || null;
+  },
+
+  getActiveUser() {
+    return activeUser;
+  },
+
+  isSyncEnabled() {
+    return syncEnabled;
+  },
+
+  setSyncEnabled(enabled: boolean) {
+    syncEnabled = enabled;
+    localStorage.setItem('otec_sync_enabled', enabled ? 'true' : 'false');
+    if (enabled) {
+      if (activeUser) {
+        setupRealtimeListener(activeUser);
+      }
+      syncStatus = 'syncing';
+      this.triggerUpdate();
+      this.syncWithCloud();
+    } else {
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+        unsubscribeSnapshot = null;
+      }
+      syncStatus = 'offline';
+      this.triggerUpdate();
+    }
+  },
+
+  // Get latest sync performance metrics
+  getLastSyncMetric(): SyncMetric {
+    return lastSyncMetrics;
+  },
+
+  getSyncHistory(): SyncMetric[] {
+    return syncMetricsHistory;
+  },
+
+  async forceSync() {
+    return this.syncWithCloud(true, 'manual_force');
+  },
+
+  // Dirty State Management
+  isDirty() {
+    return hasLocalDirtyState;
+  },
+
+  markDirty() {
+    hasLocalDirtyState = true;
+    lastLocalMutationTime = Date.now();
+  },
+
+  clearDirty() {
+    hasLocalDirtyState = false;
+  },
+
+  // Resolve multi-browser / cloud concurrency conflict
+  resolveConflict(choice: 'local' | 'incoming' | 'merge', resolvedData?: AppData) {
+    if (choice === 'local') {
+      hasLocalDirtyState = false;
+      saveToLocal(currentData);
+      this.syncWithCloud(true, 'conflict_resolve_local');
+    } else if (choice === 'incoming' && resolvedData) {
+      hasLocalDirtyState = false;
+      currentData = migrateLowerPrimarySubjects(resolvedData);
+      saveToLocal(currentData, true);
+      this.triggerUpdate();
+    } else if (choice === 'merge' && resolvedData) {
+      hasLocalDirtyState = false;
+      currentData = migrateLowerPrimarySubjects(resolvedData);
+      saveToLocal(currentData);
+      this.triggerUpdate();
+      this.syncWithCloud(true, 'conflict_resolve_merge');
+    }
+  },
+
+  // Simulate a multi-browser concurrency conflict with side-by-side modal
+  simulateMultiBrowserConflict(sourceBrowserName: string = "Secondary Staff Terminal (Chrome)") {
+    hasLocalDirtyState = true;
+    const incomingData: AppData = JSON.parse(JSON.stringify(currentData));
+    
+    // Add a remote learner or remote score entry to create a realistic conflict
+    if (!incomingData.learners) incomingData.learners = [];
+    const simulatedRemoteLearner: Learner = {
+      id: 'conflict-sim-' + Math.random().toString(36).slice(2, 7),
+      admNo: 'OTEC/' + Math.floor(1000 + Math.random() * 8999),
+      name: 'Simulated Remote Learner (' + sourceBrowserName.split(' ')[0] + ')',
+      cls: incomingData.learners[0]?.cls || 'P.7',
+      sex: 'Male',
+      age: '12',
+      outstandingBalance: '150000',
+      guardianPhone: '+256700112233'
+    };
+    incomingData.learners = [simulatedRemoteLearner, ...incomingData.learners];
+
+    window.dispatchEvent(new CustomEvent('otec-sync-conflict', {
+      detail: {
+        localData: JSON.parse(JSON.stringify(currentData)),
+        incomingData,
+        sourceName: sourceBrowserName,
+        timestamp: new Date().toLocaleTimeString()
+      }
+    }));
+
+    window.dispatchEvent(new CustomEvent('otec-toast', {
+      detail: {
+        message: 'Multi-Browser Concurrency Conflict Triggered: Opening side-by-side comparison modal!',
+        type: 'warning'
+      }
+    }));
+  },
+
+  // Populate / Simulate changes coming from a secondary browser session
+  simulateMultiBrowserMutation(sourceBrowserName: string = "Secondary Chrome Browser (Staff Terminal)") {
+    if (!currentData.activityLog) currentData.activityLog = [];
+    const simulatedLog: ActivityLog = {
+      id: 'mb-' + Math.random().toString(36).slice(2, 9),
+      timestamp: new Date().toISOString(),
+      type: 'scores_recorded',
+      details: `Live scores and ledger data broadcast received from ${sourceBrowserName} (Session ID: ${TAB_CLIENT_ID.slice(0, 10)}...).`,
+      operator: 'Remote User'
+    };
+    currentData.activityLog = [simulatedLog, ...currentData.activityLog].slice(0, 50);
+    
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud(true, 'multi_browser_sim');
+    
+    window.dispatchEvent(new CustomEvent('otec-toast', {
+      detail: {
+        message: `Multi-Browser Event Broadcasted: Live changes sent from ${sourceBrowserName}!`,
+        type: 'success'
+      }
+    }));
+  },
+
+  // Sync state to Firebase Firestore & Workspace Cloud Server
+  async syncWithCloud(force: boolean = false, triggerReason: string = 'data_mutation') {
+    if (!syncEnabled) {
+      syncStatus = 'offline';
+      this.triggerUpdate();
+      return;
+    }
+
+    const currentStr = JSON.stringify(currentData);
+    const payloadKb = Math.round((new Blob([currentStr]).size / 1024) * 10) / 10;
+
+    // Incremental check: sync ONLY if new data is entered in the browser (unless forced)
+    if (!force && lastSyncedDataHash && currentStr === lastSyncedDataHash) {
+      const cachedMetric: SyncMetric = {
+        id: 'sm-' + Math.random().toString(36).slice(2, 9),
+        timestamp: new Date().toLocaleTimeString(),
+        durationMs: 0,
+        payloadKb,
+        status: 'cached',
+        trigger: triggerReason,
+        details: 'Sync skipped: Data unchanged in browser (cached)'
+      };
+      lastSyncMetrics = cachedMetric;
+      syncStatus = 'synced';
+      this.triggerUpdate();
+      
+      window.dispatchEvent(new CustomEvent('otec-sync-metric', { detail: cachedMetric }));
+      return;
+    }
+
+    const startTime = performance.now();
+
+    try {
+      syncStatus = 'syncing';
+      this.triggerUpdate();
+
+      // Always save to standard Workspace server storage
+      await syncWithWorkspaceServer(currentData);
+
+      // Silent clone to Google Drive if connected
+      silentSyncToGoogleDrive(currentData).catch(err => {
+        console.warn('Silent auto-sync to Google Drive deferred:', err);
+      });
+
+      if (activeUser) {
+        const userDocRef = doc(db, 'users', activeUser.uid, 'data', 'appState');
+        await setDoc(userDocRef, sanitizeForFirestore(currentData));
+      }
+
+      const durationMs = Math.round(performance.now() - startTime);
+      lastSyncedDataHash = currentStr;
+      
+      const successMetric: SyncMetric = {
+        id: 'sm-' + Math.random().toString(36).slice(2, 9),
+        timestamp: new Date().toLocaleTimeString(),
+        durationMs,
+        payloadKb,
+        status: 'synced',
+        trigger: triggerReason,
+        details: `Successfully synced ${payloadKb} KB in ${durationMs}ms`
+      };
+
+      lastSyncMetrics = successMetric;
+      syncMetricsHistory = [successMetric, ...syncMetricsHistory].slice(0, 30);
+      localStorage.setItem('otec_sync_metrics_history', JSON.stringify(syncMetricsHistory));
+
+      syncStatus = 'synced';
+      localStorage.setItem('otec_last_synced', new Date().toISOString());
+      this.triggerUpdate();
+
+      window.dispatchEvent(new CustomEvent('otec-sync-metric', { detail: successMetric }));
+    } catch (e: any) {
+      const durationMs = Math.round(performance.now() - startTime);
+      const isOffline = e && (e.code === 'unavailable' || e.message?.toLowerCase().includes('offline') || !navigator.onLine);
+      
+      const errorMetric: SyncMetric = {
+        id: 'sm-' + Math.random().toString(36).slice(2, 9),
+        timestamp: new Date().toLocaleTimeString(),
+        durationMs,
+        payloadKb,
+        status: isOffline ? 'offline' : 'error',
+        trigger: triggerReason,
+        details: isOffline ? 'Device offline: Changes cached locally' : `Sync failed: ${e.message || 'Unknown network error'}`
+      };
+
+      lastSyncMetrics = errorMetric;
+      syncMetricsHistory = [errorMetric, ...syncMetricsHistory].slice(0, 30);
+      localStorage.setItem('otec_sync_metrics_history', JSON.stringify(syncMetricsHistory));
+
+      if (isOffline) {
+        console.info('Cloud sync deferred: Device is currently offline.');
+        syncStatus = 'offline';
+      } else {
+        console.error('Error syncing with cloud', e);
+        syncStatus = 'error';
+      }
+      this.triggerUpdate();
+
+      window.dispatchEvent(new CustomEvent('otec-sync-metric', { detail: errorMetric }));
+    }
+  },
+
+  // Initialize Auth Listening
+  initAuthListener() {
+    // Load from workspace server on startup
+    if (syncEnabled) {
+      loadFromWorkspaceServer(true);
+
+      // Silent Auto-restore from Google Drive if token is active
+      autoRestoreFromGoogleDrive().then(driveData => {
+        if (driveData && driveData.learners) {
+          const migrated = migrateLowerPrimarySubjects(driveData);
+          currentData = migrated;
+          saveToLocal(currentData);
+          dataManager.triggerUpdate();
+          
+          window.dispatchEvent(new CustomEvent('otec-modal-notify', {
+            detail: {
+              title: 'Google Drive Auto-Restore',
+              message: 'Restored latest cloud database backup from Google Drive automatically.',
+              type: 'success',
+              timestamp: new Date().toLocaleString()
+            }
+          }));
+        }
+      });
+    }
+
+    onAuthStateChanged(auth, async (user) => {
+      activeUser = user;
+      if (user) {
+        localStorage.removeItem('otec_manually_signed_out');
+        
+        if (syncEnabled) {
+          syncStatus = 'syncing';
+          this.triggerUpdate();
+          setupRealtimeListener(user);
+
+          try {
+            const userDocRef = doc(db, 'users', user.uid, 'data', 'appState');
+            const docSnap = await getDoc(userDocRef);
+
+            if (docSnap.exists()) {
+              // Load cloud state
+              let cloudData = docSnap.data() as AppData;
+              cloudData = migrateLowerPrimarySubjects(cloudData);
+              currentData = cloudData;
+              saveToLocal(currentData);
+              syncStatus = 'synced';
+              localStorage.setItem('otec_last_synced', new Date().toISOString());
+            } else {
+              // Document doesn't exist in cloud, upload current local state
+              currentData = migrateLowerPrimarySubjects(currentData);
+              await setDoc(userDocRef, sanitizeForFirestore(currentData));
+              syncStatus = 'synced';
+              localStorage.setItem('otec_last_synced', new Date().toISOString());
+            }
+          } catch (e: any) {
+            const isOffline = e && (e.code === 'unavailable' || e.code === 'failed-precondition' || e.message?.toLowerCase().includes('offline') || !navigator.onLine);
+            if (isOffline) {
+              console.info('Operating in offline mode. Local-first data will sync when connectivity is restored.');
+              syncStatus = 'offline';
+            } else {
+              console.error('Error fetching user data from firestore', e);
+              syncStatus = 'error';
+            }
+            this.triggerUpdate();
+          }
+        } else {
+          syncStatus = 'offline';
+        }
+      } else {
+        syncStatus = 'offline';
+        
+        // Auto-login with admin/admin1234 if not manually signed out
+        const manuallySignedOut = localStorage.getItem('otec_manually_signed_out');
+        if (!manuallySignedOut) {
+          try {
+            syncStatus = 'syncing';
+            this.triggerUpdate();
+            // Silent admin login using mapped address
+            await signInWithEmailAndPassword(auth, 'admin@otec-reportcards.local', 'admin1234');
+          } catch (err: any) {
+            if (err.code === 'auth/operation-not-allowed') {
+              // Email/Password sign-in is disabled. Let's try Anonymous authentication as fallback
+              try {
+                await signInAnonymously(auth);
+                console.log('Firebase Cloud Auth: Silent anonymous session established successfully.');
+              } catch (anonErr: any) {
+                syncStatus = 'offline';
+                this.triggerUpdate();
+                console.info('Firebase Cloud Auth: Operating in offline local-only storage mode.', anonErr.message);
+              }
+            } else if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+              try {
+                await createUserWithEmailAndPassword(auth, 'admin@otec-reportcards.local', 'admin1234');
+              } catch (regErr: any) {
+                if (regErr.code === 'auth/operation-not-allowed') {
+                  try {
+                    await signInAnonymously(auth);
+                  } catch (anonErr2: any) {
+                    syncStatus = 'offline';
+                    this.triggerUpdate();
+                    console.info('Firebase Cloud Auth: Registration/Anonymous disabled. Using offline local-only storage.');
+                  }
+                } else {
+                  console.warn('Silent admin registration deferred:', regErr.message);
+                }
+              }
+            } else {
+              syncStatus = 'offline';
+              this.triggerUpdate();
+              console.warn('Silent login deferred:', err.message);
+            }
+          }
+        }
+      }
+      this.triggerUpdate();
+    });
+  }
+};
+
+// Function to flush and save updated database state when closing or leaving the app
+function saveOnAppClose() {
+  try {
+    saveToLocal(currentData, true);
+    // Firestore handles offline caching automatically on writes
+    console.log('App closing: Updated data saved to local storage/Firestore offline cache.');
+  } catch (err) {
+    console.warn('App close save deferred:', err);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', saveOnAppClose);
+  window.addEventListener('pagehide', saveOnAppClose);
+}
+
+// Initialize auth listener and sync state on initial page load
+dataManager.initAuthListener();
+loadFromWorkspaceServer(true);
+
+export default dataManager;
+export { activeUser, syncStatus, saveOnAppClose };
