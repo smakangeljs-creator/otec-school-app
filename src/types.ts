@@ -145,6 +145,7 @@ export interface AppraisalRecord {
   recommendations?: string;
   department?: string;
   metrics?: TeacherAppraisalMetrics;
+  pendingAIGeneration?: boolean;
 }
 
 export interface HRData {

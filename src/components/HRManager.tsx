@@ -130,63 +130,64 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
     const updatedPayroll = currentPayroll.filter(p => p.month !== month).concat(newPayrollRecords);
     onUpdateHR(updatedPayroll, data.hr?.appraisals || []);
   };
-  const handleGenerateAppraisal = async () => {
-    if (!appraisalStaffId || !appraisalScore) {
-      alert("Please select a staff member and enter a score first.");
-      return;
-    }
-    
-    setIsGeneratingAI(true);
-    
-    // Find staff details
-    const isTeacher = data.settings?.teachers?.some(t => t.id === appraisalStaffId);
-    let staffName = '';
-    let role = isTeacher ? 'Teacher' : 'Non-Teaching Staff';
-    let department = 'General';
-    
-    if (isTeacher) {
-      const teacher = data.settings?.teachers?.find(t => t.id === appraisalStaffId);
-      staffName = teacher?.name || 'Unknown';
-      department = teacher?.specialization || 'Teaching';
-    } else {
-      const nts = data.settings?.nonTeachingStaff?.find(s => s.id === appraisalStaffId);
-      staffName = nts?.name || 'Unknown';
-      department = nts?.department || 'Support';
-    }
-    
-    try {
-      const functions = getFunctions(app);
-      const generateAppraisalFeedback = httpsCallable(functions, 'generateAppraisalFeedback');
-      
-      const response = await generateAppraisalFeedback({
-        staffName,
-        role,
-        department,
-        score: Number(appraisalScore),
-        maxScore: 100
-      });
-      
-      const resData = response.data as { comments: string, recommendations: string };
-      
-      if (resData.comments) {
-        setAppraisalComments(resData.comments);
-      }
-      if (resData.recommendations) {
-        setAppraisalRecommendations(resData.recommendations);
-      }
-      
-      const customEvent = new CustomEvent('otec-toast', { detail: { message: 'AI Appraisal Generated!', type: 'success' }});
-      window.dispatchEvent(customEvent);
-    } catch (err) {
-      console.error("Failed to generate AI appraisal:", err);
-      const customEvent = new CustomEvent('otec-toast', { detail: { message: 'Failed to connect to AI server. Check connection or deploy Firebase functions.', type: 'error' }});
-      window.dispatchEvent(customEvent);
-    } finally {
-      setIsGeneratingAI(false);
-    }
-  };
+  const processingAIRef = React.useRef(false);
 
+  React.useEffect(() => {
+    const processPendingAI = async () => {
+      if (processingAIRef.current || !navigator.onLine) return;
 
+      const pendingAppraisal = data.hr?.appraisals?.find(a => a.pendingAIGeneration);
+      if (!pendingAppraisal) return;
+
+      processingAIRef.current = true;
+      setIsGeneratingAI(true);
+      
+      const isTeacher = data.settings?.teachers?.some(t => t.id === pendingAppraisal.staffId);
+      let staffName = '';
+      let role = isTeacher ? 'Teacher' : 'Non-Teaching Staff';
+      let department = pendingAppraisal.department || 'General';
+      
+      if (isTeacher) {
+        staffName = data.settings?.teachers?.find(t => t.id === pendingAppraisal.staffId)?.name || 'Unknown';
+      } else {
+        staffName = data.settings?.nonTeachingStaff?.find(s => s.id === pendingAppraisal.staffId)?.name || 'Unknown';
+      }
+
+      try {
+        const functions = getFunctions(app);
+        const generateAppraisalFeedback = httpsCallable(functions, 'generateAppraisalFeedback');
+        
+        const response = await generateAppraisalFeedback({
+          staffName,
+          role,
+          department,
+          score: Number(pendingAppraisal.score),
+          maxScore: 100
+        });
+        
+        const resData = response.data as { comments: string, recommendations: string };
+        
+        const updatedAppraisals = (data.hr?.appraisals || []).map(a => 
+          a.id === pendingAppraisal.id 
+            ? { ...a, comments: resData.comments || a.comments, recommendations: resData.recommendations || a.recommendations, pendingAIGeneration: false }
+            : a
+        );
+        
+        onUpdateHR(data.hr?.payroll || [], updatedAppraisals);
+        window.dispatchEvent(new CustomEvent('otec-toast', { detail: { message: `AI Auto-Comment Generated for ${staffName}!`, type: 'success' }}));
+      } catch (err) {
+        console.error("Background AI generation failed (will retry when online):", err);
+      } finally {
+        setIsGeneratingAI(false);
+        processingAIRef.current = false;
+      }
+    };
+
+    processPendingAI();
+    
+    window.addEventListener('online', processPendingAI);
+    return () => window.removeEventListener('online', processPendingAI);
+  }, [data.hr?.appraisals, data.settings, onUpdateHR]);
   const handleAddAppraisal = () => {
     if (!appraisalStaffId || !appraisalScore) return;
     
@@ -203,11 +204,12 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
       staffId: appraisalStaffId,
       staffType: isTeacher ? 'teacher' : 'non-teaching',
       score: Number(appraisalScore),
-      comments: appraisalComments,
-      recommendations: appraisalRecommendations,
+      comments: appraisalComments || 'Pending AI Generation...',
+      recommendations: appraisalRecommendations || 'Pending AI Generation...',
       evaluator: appraisalEvaluator,
       date: appraisalDate,
       department: department,
+      pendingAIGeneration: true,
       ...(isTeacher ? { metrics: appraisalMetrics } : {})
     };
     
@@ -219,6 +221,8 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
     setAppraisalScore('');
     setAppraisalComments('');
     setAppraisalRecommendations('');
+    setAppraisalMetrics(initialMetrics);
+    window.dispatchEvent(new CustomEvent('otec-toast', { detail: { message: 'Appraisal saved! AI is generating comments in the background.', type: 'info' } }));
   };
 
   const handleAddStaff = (e: React.FormEvent) => {
@@ -621,7 +625,14 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
                                   {app.score}%
                                 </span>
                               </td>
-                              <td className="px-4 py-3 text-slate-600 text-xs max-w-xs truncate" title={app.comments}>{app.comments}</td>
+                              <td className="px-4 py-3 text-slate-600 text-xs max-w-xs truncate" title={app.comments}>
+                                {app.pendingAIGeneration ? (
+                                  <span className="text-indigo-500 italic flex items-center gap-1">
+                                    <Sparkles size={12} className="animate-pulse" /> 
+                                    AI is analyzing...
+                                  </span>
+                                ) : app.comments}
+                              </td>
                               <td className="px-4 py-3 text-right">
                                 <button 
                                   onClick={() => setViewAppraisal(app)}
@@ -1125,15 +1136,6 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
               <div>
                 <div className="flex justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-600">Comments / Notes</label>
-                  <button 
-                    type="button" 
-                    onClick={handleGenerateAppraisal}
-                    disabled={isGeneratingAI || !appraisalStaffId || !appraisalScore}
-                    className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 disabled:opacity-50"
-                  >
-                    {isGeneratingAI ? <span className="animate-spin text-lg leading-none">⚙</span> : <Sparkles size={12} />}
-                    {isGeneratingAI ? 'Generating...' : 'Auto-Generate AI Feedback'}
-                  </button>
                 </div>
                 <textarea 
                   required
