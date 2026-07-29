@@ -1180,11 +1180,11 @@ export default function Scores({ data, onUpdateScores, onUpdatePsychomotor, onUp
       headInitials: headInitials,
       nextTermBegins: nextTermBegins
     });
-
-    alert('Successfully saved student marks, skills, and comments!');
+    
+    window.dispatchEvent(new CustomEvent('otec-toast', { detail: { message: 'Results saved successfully!', type: 'success' } }));
   };
 
-  // Handle Ctrl+S keyboard shortcut trigger
+  // Handle saving via keyboard (Ctrl+S or Cmd+S)
   const saveAllRef = React.useRef(handleSaveAll);
   React.useEffect(() => {
     saveAllRef.current = handleSaveAll;
@@ -1953,7 +1953,7 @@ export default function Scores({ data, onUpdateScores, onUpdatePsychomotor, onUp
                     });
                     localStorage.removeItem(`school_scores_draft_unified_${selectedLearner}`);
                     setUnifiedDraftRestored(false);
-                    alert('Successfully saved all unified marks to school database!');
+                    window.dispatchEvent(new CustomEvent('otec-toast', { detail: { message: 'Successfully saved all unified marks to school database!', type: 'success' } }));
                   }}
                   className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1"
                 >

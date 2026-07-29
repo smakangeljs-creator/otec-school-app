@@ -131,7 +131,7 @@ export default function BackupManager({ data, backgroundOnly = false }: BackupMa
           setGithubSyncing(false);
           if (error) {
             console.error('GitHub Sync Error:', error);
-            if (!auto) triggerToast('Failed to sync with GitHub. See console for details.', 'error');
+            triggerToast('Failed to sync with GitHub. See console for details.', 'error');
           } else {
             console.log('GitHub Sync Output:', stdout);
             if (!auto) {

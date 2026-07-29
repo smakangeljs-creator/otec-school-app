@@ -34,7 +34,7 @@ export default function ClinicRecordsPanel({ data, clinicState, onUpdateClinic }
         [selectedLearner]: record as ClinicRecord
       }
     });
-    alert('Medical Record Saved!');
+    window.dispatchEvent(new CustomEvent('otec-toast', { detail: { message: 'Medical Record Saved Successfully!', type: 'success' } }));
     setShowForm(false);
     setSelectedLearner('');
   };
