@@ -8,15 +8,25 @@ echo.
 :: Check if Git is installed
 git --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ERROR] Git is not installed! Please download and install Git from https://git-scm.com/
-    pause
-    exit /b
+    echo [INFO] Git is missing! Installing Git automatically in the background...
+    winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements --silent
+    echo [INFO] Git installed.
+    set "PATH=%PATH%;C:\Program Files\Git\cmd"
 )
 
 :: Check if Node is installed
 npm --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ERROR] Node.js/NPM is not installed! Please download and install Node.js from https://nodejs.org/
+    echo [INFO] Node.js and NPM are missing! Installing Node.js automatically in the background...
+    winget install --id OpenJS.NodeJS.LTS -e --source winget --accept-source-agreements --accept-package-agreements --silent
+    echo [INFO] Node.js installed.
+    set "PATH=%PATH%;C:\Program Files\nodejs"
+)
+
+:: Final sanity check
+git --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] Git installation failed or PATH not updated. Please install it manually from https://git-scm.com/
     pause
     exit /b
 )
