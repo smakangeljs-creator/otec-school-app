@@ -256,6 +256,7 @@ export interface SchoolSettings {
   disciplineOffenses?: { id: string; name: string; type: 'Merit' | 'Demerit'; defaultPoints?: number }[];
   assetLocations?: string[];
   clinicMedicines?: string[];
+  geminiApiKey?: string;
 }
 
 export interface ScoreRecord {

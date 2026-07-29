@@ -66,16 +66,37 @@ export default function AIChatbot({ data }: AIChatbotProps) {
     setLoading(true);
 
     try {
-      const functions = getFunctions(app);
-      const generateChatReply = httpsCallable(functions, 'generateChatReply');
+      const { getGeminiClient } = await import('../lib/gemini');
+      const ai = getGeminiClient(data.settings?.geminiApiKey);
+      
+      const systemPrompt = `You are OTEC Edu-AI, a grounded school management assistant.
+Current Date/Time: ${new Date().toLocaleString()}
 
-      const response = await generateChatReply({
-        messages: newMessages,
-        appData: data,
-        currentDateTime: new Date().toLocaleString()
+Here is the live school data (students, HR, finance, settings):
+${JSON.stringify(data)}
+
+Respond to the user's latest query.
+If they ask to add, delete, or modify something, return the updated data object in the JSON. If it's just a question or a summary report, return updatedData as null.
+If they ask for a summary report, provide a comprehensive markdown report analyzing the health of the school (total students, financials, etc.).
+Always output valid JSON ONLY with the format:
+{
+  "reply": "Your markdown formatted message to the user",
+  "updatedData": null
+}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          { role: 'user', parts: [{ text: systemPrompt + "\n\nChat History:\n" + JSON.stringify(newMessages) }] }
+        ],
+        config: {
+          responseMimeType: "application/json",
+        }
       });
 
-      const resData = response.data as { reply: string, updatedData?: any };
+      if (!response.text) throw new Error("No response from AI");
+      const resData = JSON.parse(response.text);
+
       setMessages(prev => [...prev, { role: 'assistant', content: resData.reply }]);
       
       if (resData.updatedData) {
@@ -105,6 +126,7 @@ export default function AIChatbot({ data }: AIChatbotProps) {
 
   // Pre-formatted query suggestions
   const suggestions = [
+    "Generate a comprehensive school summary report of all our data",
     "Record an income of 450,000 UGX under Tuition Fees (Cash) with description 'Tuition for Nabakka'",
     "Add student 'Kato Julius', Male, class P7, guardian 'Nsubuga John' 0772200300",
     "Record 92 marks in Mathematics for student L1001 on exam set-1",

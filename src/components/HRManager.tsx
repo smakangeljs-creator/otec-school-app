@@ -154,18 +154,31 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
       }
 
       try {
-        const functions = getFunctions(app);
-        const generateAppraisalFeedback = httpsCallable(functions, 'generateAppraisalFeedback');
+        const { getGeminiClient } = await import('../lib/gemini');
+        const ai = getGeminiClient(data.settings?.geminiApiKey);
         
-        const response = await generateAppraisalFeedback({
-          staffName,
-          role,
-          department,
-          score: Number(pendingAppraisal.score),
-          maxScore: 100
+        const prompt = `You are a professional HR assistant. You need to write an appraisal feedback and recommendations for a school staff member.
+Staff Name: ${staffName}
+Role: ${role}
+Department: ${department}
+Score: ${pendingAppraisal.score}/100
+
+Please provide:
+1. "comments": Professional feedback based on the score (e.g. excellent if high, needs improvement if low).
+2. "recommendations": Professional recommendations for their career growth or improvement.
+
+Output valid JSON ONLY with the keys "comments" and "recommendations". No markdown formatting.`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+          }
         });
         
-        const resData = response.data as { comments: string, recommendations: string };
+        if (!response.text) throw new Error("No response from AI");
+        const resData = JSON.parse(response.text);
         
         const updatedAppraisals = (data.hr?.appraisals || []).map(a => 
           a.id === pendingAppraisal.id 
@@ -175,8 +188,11 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
         
         onUpdateHR(data.hr?.payroll || [], updatedAppraisals);
         window.dispatchEvent(new CustomEvent('otec-toast', { detail: { message: `AI Auto-Comment Generated for ${staffName}!`, type: 'success' }}));
-      } catch (err) {
+      } catch (err: any) {
         console.error("Background AI generation failed (will retry when online):", err);
+        if (err.message?.includes('API key')) {
+          window.dispatchEvent(new CustomEvent('otec-toast', { detail: { message: err.message, type: 'error' }}));
+        }
       } finally {
         setIsGeneratingAI(false);
         processingAIRef.current = false;

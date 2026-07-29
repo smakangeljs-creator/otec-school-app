@@ -93,6 +93,7 @@ export default function Settings({ data, onUpdateSettings }: SettingsProps) {
   const [headTeacherName, setHeadTeacherName] = useState(data.settings.headTeacherName);
   const [headTeacherInitials, setHeadTeacherInitials] = useState(data.settings.headTeacherInitials);
   const [logo, setLogo] = useState(data.settings.logo);
+  const [geminiApiKey, setGeminiApiKey] = useState(data.settings.geminiApiKey || '');
 
   // New Exam set states
   const [newTerm, setNewTerm] = useState('Term 1');
@@ -278,6 +279,7 @@ export default function Settings({ data, onUpdateSettings }: SettingsProps) {
       headTeacherName,
       headTeacherInitials,
       logo,
+      geminiApiKey,
       termStartDate,
       termEndDate,
       calendarEvents: updatedEvents
@@ -1041,6 +1043,30 @@ export default function Settings({ data, onUpdateSettings }: SettingsProps) {
               className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-blue-600/10"
             >
               Save School General Details
+            </button>
+          </form>
+
+          <form onSubmit={handleSaveGeneral} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6 mt-6">
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">AI Configuration (Gemini API)</h3>
+              <p className="text-sm text-slate-500 mt-1">Provide your own Google Gemini API key to enable local AI generation without requiring a backend server. Your key is stored securely in your local browser database.</p>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1">Gemini API Key</label>
+              <input 
+                type="password"
+                value={geminiApiKey} 
+                onChange={e => setGeminiApiKey(e.target.value)} 
+                className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono"
+                placeholder="AIzaSy..."
+              />
+            </div>
+            <button
+              type="submit"
+              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-600/10"
+            >
+              Save AI Configuration
             </button>
           </form>
         )}
