@@ -109,7 +109,7 @@ export default function Staff360({ data }: Staff360Props) {
                   staffGateLogs.slice(0, 5).map(log => (
                     <div key={log.id} className="flex justify-between items-center text-xs border-b border-slate-50 pb-2">
                       <div className="flex items-center gap-2">
-                        {log.direction === 'IN' ? (
+                        {log.direction === 'Present' ? (
                           <div className="bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded">IN</div>
                         ) : (
                           <div className="bg-rose-100 text-rose-700 font-bold px-1.5 py-0.5 rounded">OUT</div>

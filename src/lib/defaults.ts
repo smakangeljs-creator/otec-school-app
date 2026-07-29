@@ -525,6 +525,7 @@ export function getDemoData(): AppData {
     finances,
     security: getDemoSecurityData(),
     transport: {
+    vans: [], fuelLogs: [], maintenanceLogs: [],
       routes: [{ id: 'route-1', name: 'Kampala Express', driver: 'Musa', capacity: 30, costPerTerm: 250000 }],
       allocations: [{ id: 'alloc-1', learnerId: learners[0]?.id || '', routeId: 'route-1', stopName: 'Ntinda', direction: 'Both', amountPaid: 250000, term: 'Term 3 2026' }]
     },

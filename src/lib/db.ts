@@ -2,7 +2,7 @@ import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInAnonymously } from 'firebase/auth';
 import { silentSyncToGoogleDrive, autoRestoreFromGoogleDrive } from './googleDriveService';
-import { AppData, SchoolSettings, Learner, ScoreRecord, PsychomotorRecord, CommentRecord, ActivityLog, FinanceTransaction, SecurityData, GateLogEntry, VisitorRecord, UnknownPersonAlert, SecurityGateSystemConfig, TransportData, LibraryData, InventoryData, HostelData, TimetableData, ClinicData, DisciplineData, ExtracurricularData, HRData, AdmissionsData, ProcurementData, Vendor, VendorInvoice, PettyCashRequisition, AuditLog } from '../types';
+import { AppData, BankAccount, BankTransfer, CommunicationsData, SchoolSettings, Learner, ScoreRecord, PsychomotorRecord, CommentRecord, ActivityLog, FinanceTransaction, SecurityData, GateLogEntry, VisitorRecord, UnknownPersonAlert, SecurityGateSystemConfig, TransportData, LibraryData, InventoryData, HostelData, TimetableData, ClinicData, DisciplineData, ExtracurricularData, HRData, AdmissionsData, ProcurementData, Vendor, VendorInvoice, PettyCashRequisition, AuditLog } from '../types';
 import { getDemoData, defaultSettings, defaultPrePrimaryGradingBands, defaultSectionSubjects, regenerateUNEBNumbers, getDemoSecurityData } from './defaults';
 
 export interface SyncMetric {

@@ -9,6 +9,7 @@ export interface Learner {
   cls: string;
   paycode?: string;
   lin?: string;
+  unebUln?: string;
   photo?: string;
   archived?: boolean;
   // Additional Excel Fields
@@ -94,6 +95,7 @@ export interface NonTeachingStaff {
   id: string;
   name: string;
   department: string;
+  role?: string;
   phone?: string;
   photo?: string;
   // HR Fields
@@ -312,10 +314,11 @@ export interface VisitorRecord {
   id: string;
   visitorName: string;
   phone: string;
-  whatsappVerified: boolean;
+  whatsappVerified?: boolean;
   nationalId: string;
   company?: string;
   purpose: string;
+  reasonForVisit?: string;
   hostTeacherName: string;
   hostId?: string;
   vehicleNumber?: string;
@@ -480,6 +483,8 @@ export interface MaintenanceLog {
 }
 
 export interface TransportData {
+  routes: any[];
+  allocations: any[];
   vans: TransportVan[];
   fuelLogs: FuelLog[];
   maintenanceLogs: MaintenanceLog[];
@@ -546,6 +551,7 @@ export interface HostelDormitory {
 export interface HostelAllocation {
   id: string;
   dormitoryId: string;
+  bedNumber?: string;
   roomId: string;
   learnerId: string;
   allocatedDate: string;
@@ -558,7 +564,9 @@ export interface HostelData {
 
 export interface TimetableSlot {
   id: string;
-  classId: string; // the specific class, e.g. 'P1', 'Senior 1'
+  classId: string;
+  stream?: string;
+  gender?: string; // the specific class, e.g. 'P1', 'Senior 1'
   dayOfWeek: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
   startTime: string; // HH:mm
   endTime: string; // HH:mm
@@ -658,6 +666,7 @@ export interface ProcurementRequest {
   estimatedCost: number;
   requestedBy: string; // Staff name or ID
   department: string;
+  role?: string;
   requestDate: string; // ISO
   status: 'Pending' | 'Approved' | 'Rejected' | 'Fulfilled';
   approvedBy?: string;

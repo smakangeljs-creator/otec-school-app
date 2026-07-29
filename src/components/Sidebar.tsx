@@ -368,11 +368,11 @@ export default function Sidebar({ currentRoute, setCurrentRoute, data, syncState
               {!isCollapsed && (
                 <div className="flex items-center gap-2 overflow-hidden">
                   <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shrink-0">
-                    {user.name.charAt(0).toUpperCase()}
+                    {(user as any).name.charAt(0).toUpperCase()}
                   </div>
                   <div className="truncate">
-                    <div className="text-xs font-bold text-white truncate">{user.name}</div>
-                    <div className="text-[9px] text-slate-400 uppercase tracking-widest">{user.role}</div>
+                    <div className="text-xs font-bold text-white truncate">{(user as any).name}</div>
+                    <div className="text-[9px] text-slate-400 uppercase tracking-widest">{(user as any).role}</div>
                   </div>
                 </div>
               )}

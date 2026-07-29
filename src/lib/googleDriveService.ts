@@ -20,7 +20,7 @@ export const initGoogleAuth = (
 // Sign in with Google to obtain fresh OAuth access token
 export const googleSignIn = async (): Promise<{ user: any; accessToken: string } | null> => {
   return new Promise((resolve, reject) => {
-    if (CLIENT_ID === 'YOUR_CLIENT_ID_HERE') {
+    if ((CLIENT_ID as string) === 'YOUR_CLIENT_ID_HERE') {
       return reject(new Error('Missing Google OAuth Client ID. Please edit src/lib/googleDriveService.ts and add your Client ID on line 2.'));
     }
     

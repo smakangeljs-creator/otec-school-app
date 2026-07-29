@@ -22,7 +22,7 @@ export default function SecurityManager({ data, onUpdateSecurity }: SecurityMana
     gateLogs: data.security?.gateLogs || [],
     visitors: data.security?.visitors && data.security.visitors.length > 0 ? data.security.visitors : defaultInitialVisitors,
     unknownAlerts: data.security?.unknownAlerts && data.security.unknownAlerts.length > 0 ? data.security.unknownAlerts : defaultInitialAlerts,
-    config: data.security?.config || {
+    config: (data.security?.config as any) || {
       gateState: 'Locked',
       autoOpenForStudents: true,
       autoOpenForTeachers: true,

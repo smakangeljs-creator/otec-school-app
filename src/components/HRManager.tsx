@@ -71,8 +71,8 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
   
   // Combine all staff into a unified view
   const allStaff = useMemo(() => {
-    const t = (data.settings?.teachers || data.teachers || []).map(tch => ({ ...tch, staffType: 'teacher' as const }));
-    const nt = (data.settings?.nonTeachingStaff || []).map(nts => ({ ...nts, staffType: 'non-teaching' as const }));
+    const t = (data.settings?.teachersList || data.teachers || []).map(tch => ({ ...tch, staffType: 'teacher' as const }));
+    const nt = (data.settings?.nonTeachingStaffList || []).map(nts => ({ ...nts, staffType: 'non-teaching' as const }));
     return [...t, ...nt];
   }, [data]);
 
@@ -104,7 +104,7 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
     if (!markingPaidId || !selectedBankAccountId) return;
     
     const pr = data.hr?.payroll.find(p => p.id === markingPaidId);
-    const staff = [...(data.settings?.teachers || []), ...(data.settings?.nonTeachingStaff || [])].find(s => s.id === pr?.staffId);
+    const staff = [...(data.settings?.teachersList || []), ...(data.settings?.nonTeachingStaffList || [])].find(s => s.id === pr?.staffId);
     if (!pr || !staff) return;
 
     const txId = 'tx-' + Math.random().toString(36).slice(2, 9);
@@ -191,15 +191,15 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
       processingAIRef.current = true;
       setIsGeneratingAI(true);
       
-      const isTeacher = data.settings?.teachers?.some(t => t.id === pendingAppraisal.staffId);
+      const isTeacher = data.settings?.teachersList?.some(t => t.id === pendingAppraisal.staffId);
       let staffName = '';
       let role = isTeacher ? 'Teacher' : 'Non-Teaching Staff';
       let department = pendingAppraisal.department || 'General';
       
       if (isTeacher) {
-        staffName = data.settings?.teachers?.find(t => t.id === pendingAppraisal.staffId)?.name || 'Unknown';
+        staffName = data.settings?.teachersList?.find(t => t.id === pendingAppraisal.staffId)?.name || 'Unknown';
       } else {
-        staffName = data.settings?.nonTeachingStaff?.find(s => s.id === pendingAppraisal.staffId)?.name || 'Unknown';
+        staffName = data.settings?.nonTeachingStaffList?.find(s => s.id === pendingAppraisal.staffId)?.name || 'Unknown';
       }
 
       try {
@@ -256,12 +256,12 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
   const handleAddAppraisal = () => {
     if (!appraisalStaffId || !appraisalScore) return;
     
-    const isTeacher = data.settings?.teachers?.some(t => t.id === appraisalStaffId);
+    const isTeacher = data.settings?.teachersList?.some(t => t.id === appraisalStaffId);
     let department = 'General';
     if (isTeacher) {
-      department = data.settings?.teachers?.find(t => t.id === appraisalStaffId)?.specialization || 'Teaching';
+      department = data.settings?.teachersList?.find(t => t.id === appraisalStaffId)?.specialization || 'Teaching';
     } else {
-      department = data.settings?.nonTeachingStaff?.find(t => t.id === appraisalStaffId)?.department || 'Support';
+      department = data.settings?.nonTeachingStaffList?.find(t => t.id === appraisalStaffId)?.department || 'Support';
     }
     
     const newAppraisal: AppraisalRecord = {
@@ -313,7 +313,7 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
         specialization: newStaffDeptSpec,
         type: 'teaching'
       };
-      onUpdateStaff([...(data.settings?.teachers || data.teachers || []), newTeacher], data.settings?.nonTeachingStaff || []);
+      onUpdateStaff([...(data.settings?.teachersList || data.teachers || []), newTeacher], data.settings?.nonTeachingStaffList || []);
     } else {
       const newNonTeaching: NonTeachingStaff = {
         ...baseStaff,
@@ -321,7 +321,7 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
         department: newStaffDeptSpec,
         type: 'non-teaching'
       };
-      onUpdateStaff(data.settings?.teachers || data.teachers || [], [...(data.settings?.nonTeachingStaff || []), newNonTeaching]);
+      onUpdateStaff(data.settings?.teachersList || data.teachers || [], [...(data.settings?.nonTeachingStaffList || []), newNonTeaching]);
     }
 
     setShowAddStaffModal(false);
@@ -356,17 +356,17 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
 
     if (staffMember.staffType === 'teacher') {
       updates.specialization = editDepartment;
-      const updatedTeachers = (data.settings?.teachers || data.teachers || []).map(t => 
+      const updatedTeachers = (data.settings?.teachersList || data.teachers || []).map(t => 
         t.id === editingStaffId ? { ...t, ...updates } : t
       );
-      onUpdateStaff(updatedTeachers, data.settings?.nonTeachingStaff || []);
+      onUpdateStaff(updatedTeachers, data.settings?.nonTeachingStaffList || []);
     } else {
       updates.department = editDepartment;
       updates.role = editDepartment || 'Staff';
-      const updatedNonTeaching = (data.settings?.nonTeachingStaff || []).map(t => 
+      const updatedNonTeaching = (data.settings?.nonTeachingStaffList || []).map(t => 
         t.id === editingStaffId ? { ...t, ...updates } : t
       );
-      onUpdateStaff(data.settings?.teachers || data.teachers || [], updatedNonTeaching);
+      onUpdateStaff(data.settings?.teachersList || data.teachers || [], updatedNonTeaching);
     }
     
     setEditingStaffId(null);
@@ -690,7 +690,7 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
                       </thead>
                       <tbody>
                         {[...data.hr.appraisals].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(app => {
-                          const staff = [...(data.settings?.teachers || []), ...(data.settings?.nonTeachingStaff || [])].find(s => s.id === app.staffId);
+                          const staff = [...(data.settings?.teachersList || []), ...(data.settings?.nonTeachingStaffList || [])].find(s => s.id === app.staffId);
                           return (
                             <tr key={app.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                               <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{new Date(app.date).toLocaleDateString()}</td>
@@ -837,7 +837,7 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
                     value={editBaseSalary}
                     onChange={e => {
                       setEditBaseSalary(e.target.value);
-                      const net = calculatePayroll(Number(e.target.value) || 0).netPay;
+                      const net = (calculatePayroll(Number(e.target.value) || 0) as any).netPay; // @ts-ignore
                       setEditNetSalary(net > 0 ? String(net) : '');
                     }}
                     placeholder="e.g. 500000"
@@ -939,7 +939,7 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
               <div className="p-10 overflow-y-auto flex-1 bg-white print:p-0 print:overflow-visible text-sm text-slate-800 font-serif leading-relaxed">
                 <div className="text-center border-b-2 border-slate-800 pb-4 mb-6">
                   <h1 className="text-2xl font-black uppercase tracking-wider">{data.settings?.schoolName || 'Otec School'}</h1>
-                  <p className="text-xs font-medium text-slate-600 mt-1">{data.settings?.schoolAddress || 'Kampala, Uganda'} | EMPLOYMENT CONTRACT</p>
+                  <p className="text-xs font-medium text-slate-600 mt-1">{data.settings?.address || 'Kampala, Uganda'} | EMPLOYMENT CONTRACT</p>
                 </div>
                 
                 <h2 className="text-center text-lg font-bold uppercase underline mb-8">Contract of Employment</h2>
@@ -1160,17 +1160,17 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
                 >
                   <option value="">-- Select Staff --</option>
                   <optgroup label="Teaching Staff">
-                    {data.settings?.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {data.settings?.teachersList.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </optgroup>
                   <optgroup label="Non-Teaching Staff">
-                    {data.settings?.nonTeachingStaff.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {data.settings?.nonTeachingStaffList.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </optgroup>
                 </select>
               </div>
 
               {appraisalStaffId && (
                 (() => {
-                  const isTeacher = data.settings?.teachers.some(t => t.id === appraisalStaffId);
+                  const isTeacher = data.settings?.teachersList.some(t => t.id === appraisalStaffId);
                   
                   // Helper to update metric
                   const updateMetric = (key: keyof TeacherAppraisalMetrics, val: string) => {
@@ -1178,9 +1178,9 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
                     const updated = { ...appraisalMetrics, [key]: num };
                     setAppraisalMetrics(updated);
                     // auto calculate overall score out of 100
-                    const total = Object.values(updated).reduce((a, b) => a + b, 0);
+                    const total = Object.values(updated).reduce((a, b) => (a as number) + (b as number), 0) as number;
                     // max possible is 90 (9 metrics * 10 max points)
-                    setAppraisalScore(Math.round((total / 90) * 100).toString());
+                    setAppraisalScore(Math.round(((total as number) / 90) * 100).toString());
                   };
                   
                   return (
@@ -1361,7 +1361,7 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
                   <label className="block text-xs font-bold text-slate-600 mb-1">Base Salary / Gross (UGX)</label>
                   <input type="number" value={newStaffBaseSalary} onChange={e => {
                     setNewStaffBaseSalary(e.target.value);
-                    const net = calculatePayroll(Number(e.target.value) || 0).netPay;
+                    const net = (calculatePayroll(Number(e.target.value) || 0) as any).netPay; // @ts-ignore
                     setNewStaffNetSalary(net > 0 ? String(net) : '');
                   }} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
@@ -1434,7 +1434,7 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Staff Member</h4>
                   <p className="text-lg font-bold text-slate-800">
                     {(() => {
-                      const staff = [...(data.settings?.teachers || []), ...(data.settings?.nonTeachingStaff || [])].find(s => s.id === viewAppraisal.staffId);
+                      const staff = [...(data.settings?.teachersList || []), ...(data.settings?.nonTeachingStaffList || [])].find(s => s.id === viewAppraisal.staffId);
                       return staff ? staff.name : 'Unknown';
                     })()}
                   </p>
@@ -1529,7 +1529,7 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
                   <div className="border-t border-slate-400 pt-2">
                     <p className="font-bold text-slate-800 text-center">
                       {(() => {
-                        const staff = [...(data.settings?.teachers || []), ...(data.settings?.nonTeachingStaff || [])].find(s => s.id === viewAppraisal.staffId);
+                        const staff = [...(data.settings?.teachersList || []), ...(data.settings?.nonTeachingStaffList || [])].find(s => s.id === viewAppraisal.staffId);
                         return staff ? staff.name : '______________________';
                       })()}
                     </p>
