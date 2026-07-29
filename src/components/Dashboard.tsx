@@ -25,7 +25,9 @@ import {
   Settings,
   Trash2,
   Clock,
-  Wallet
+  Wallet,
+  BedDouble,
+  ShieldCheck
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -176,6 +178,7 @@ export default function Dashboard({ data }: DashboardProps) {
   const totalLearners = activeLearners.length;
   const boysCount = activeLearners.filter(l => l.sex === 'Male').length;
   const girlsCount = activeLearners.filter(l => l.sex === 'Female').length;
+  const pendingAdmissions = data.admissions?.applicants?.filter(a => a.status === 'Pending').length || 0;
 
   // Let's analyze scores for active context
   // We'll search for the latest active exam set sat by our candidates. Let's look at ES3 (EOT) or check any exam set with scores.
@@ -449,8 +452,62 @@ export default function Dashboard({ data }: DashboardProps) {
     }
   });
 
+  // --- EXECUTIVE KPIs ---
+  const totalOutstanding = (data.finances || [])
+    .filter(f => f.type === 'Invoice' && f.status !== 'Paid')
+    .reduce((sum, inv) => sum + (inv.amount - (inv.amountPaid || 0)), 0);
+
+  const staffOnLeave = (data.hr?.employees || []).filter(e => e.status === 'On Leave').length;
+
+  const totalBeds = (data.hostel?.dorms || []).reduce((sum, dorm) => sum + dorm.capacity, 0);
+  const occupiedBeds = (data.hostel?.allocations || []).filter(a => a.status === 'Active').length;
+  const bedVacancies = totalBeds - occupiedBeds;
+
+  const activeVisitors = (data.security?.visitors || []).filter(v => v.status === 'Checked In').length;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-200">
+      
+      {/* Executive KPI Ribbon */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+          <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+            <Wallet size={24} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Arrears</p>
+            <p className="text-xl font-black text-slate-900">UGX {(totalOutstanding / 1000000).toFixed(1)}M</p>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+          <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600">
+            <Users size={24} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Staff on Leave</p>
+            <p className="text-xl font-black text-slate-900">{staffOnLeave}</p>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+          <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
+            <BedDouble size={24} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Bed Vacancies</p>
+            <p className="text-xl font-black text-slate-900">{bedVacancies}</p>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+          <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600">
+            <ShieldCheck size={24} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Visitors</p>
+            <p className="text-xl font-black text-slate-900">{activeVisitors}</p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
           <h2 className="text-lg font-extrabold text-slate-950 tracking-tight">
@@ -509,7 +566,7 @@ export default function Dashboard({ data }: DashboardProps) {
       ) : (
         <>
           {/* Overview stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Total Learners</span>
@@ -524,6 +581,22 @@ export default function Dashboard({ data }: DashboardProps) {
             <span>Boys: <b className="text-slate-700">{boysCount}</b></span>
             <span className="text-slate-200">|</span>
             <span>Girls: <b className="text-slate-700">{girlsCount}</b></span>
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">New Admissions</span>
+            <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center">
+              <Users size={20} />
+            </div>
+          </div>
+          <div className="mt-4 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-slate-900">{pendingAdmissions}</span>
+          </div>
+          <div className="mt-3 text-xs text-slate-500 flex items-center gap-1 border-t border-slate-100 pt-3">
+            <Clock size={14} className="text-orange-500" />
+            <span>Pending reviews</span>
           </div>
         </div>
 

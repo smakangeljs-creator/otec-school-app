@@ -952,6 +952,186 @@
         "type": "event",
         "description": "Primary 7 promotional lists posted and Nurseries Graduation ceremony."
       }
+    ],
+    "teachers": [
+      {
+        "id": "tchr-0dp39boxe",
+        "name": "SSEMAKULA JOSEPH",
+        "initials": "SS",
+        "phone": "O757211677",
+        "specialization": "HEADTEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-ccgsfsa56",
+        "name": " KIMERA JOY",
+        "initials": " K",
+        "phone": "O703986845",
+        "specialization": "TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-nooyf89jc",
+        "name": "NAMBIRIGE NORAH LOVINSA",
+        "initials": "NA",
+        "phone": "O705884460",
+        "specialization": "TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-vpct6cjeu",
+        "name": "NASANGHA NIMULOD",
+        "initials": "NA",
+        "phone": "O730404110",
+        "specialization": "TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-mezt6ad0t",
+        "name": "NANNOZI WINNIE",
+        "initials": "NA",
+        "phone": "O708531444",
+        "specialization": "TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-yyqf8d8wk",
+        "name": "SSENYONJO JOHN",
+        "initials": "SS",
+        "phone": "O787604877",
+        "specialization": "TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-cqc57nife",
+        "name": "BABIRYE JUSTINE",
+        "initials": "BA",
+        "phone": "O756873887",
+        "specialization": " TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-r5nny3d0z",
+        "name": "OKELLO JOSEPH",
+        "initials": "OK",
+        "phone": "O773344845",
+        "specialization": "TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-b5nx39aga",
+        "name": "NAKIMERA JUSTINE ",
+        "initials": "NA",
+        "phone": "O743894961",
+        "specialization": "TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-mp6rjkinx",
+        "name": "NABATANZI ANNET",
+        "initials": "NA",
+        "phone": "O750946927",
+        "specialization": "TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-erz3b3glu",
+        "name": "KATULINDE LILIAN",
+        "initials": "KA",
+        "phone": "O789510116",
+        "specialization": "TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-ou7bkrnn6",
+        "name": "NAMAZZI BRENDA",
+        "initials": "NA",
+        "phone": "O706321430",
+        "specialization": "TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-yfhzg2uw6",
+        "name": "MWERU GONZAGA",
+        "initials": "MW",
+        "phone": "O772494290",
+        "specialization": "TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-guour9r8p",
+        "name": "ABAGO SANTA",
+        "initials": "AB",
+        "phone": "O786681775",
+        "specialization": "TEACHER",
+        "status": "Active"
+      },
+      {
+        "id": "tchr-5e1zt73lb",
+        "name": "ONYANGO  GEOFREY",
+        "initials": "ON",
+        "phone": "O755694220",
+        "specialization": "TEACHER",
+        "status": "Active"
+      }
+    ],
+    "nonTeachingStaff": [
+      {
+        "id": "ntsf-wybjee3cd",
+        "name": "NANYOMBI MARGARET",
+        "department": "BURSAR",
+        "phone": "0758 72 81 65",
+        "status": "Active"
+      },
+      {
+        "id": "ntsf-lwzm51e8l",
+        "name": "AMANI ISMAIL",
+        "department": "SECURITY GUARD",
+        "phone": "O74008678",
+        "status": "Active"
+      },
+      {
+        "id": "ntsf-n3wo4ujsh",
+        "name": "NANKWASA SAUL",
+        "department": "SECURITY GUARD",
+        "phone": "O788456195",
+        "status": "Active"
+      },
+      {
+        "id": "ntsf-hgp7ublcy",
+        "name": "NALWOGA JANE",
+        "department": "CLEANER",
+        "phone": "O780997799",
+        "status": "Active"
+      },
+      {
+        "id": "ntsf-0ne9b3qya",
+        "name": "TURYAHEBWA DIANA",
+        "department": "CLEANER",
+        "phone": "O763079231",
+        "status": "Active"
+      },
+      {
+        "id": "ntsf-k6matiwo8",
+        "name": "NAMAGANDA FATUMA ",
+        "department": "MATRON",
+        "phone": "",
+        "status": "Active"
+      },
+      {
+        "id": "ntsf-bu8omfq6e",
+        "name": "NABUKENYA PROSSY",
+        "department": "COOK",
+        "phone": "O755350072",
+        "status": "Active"
+      },
+      {
+        "id": "ntsf-lb8oyhty8",
+        "name": "SSANSA ANTHONY",
+        "department": "DRIVER",
+        "phone": "O756964966",
+        "status": "Active"
+      }
     ]
   },
   "activityLog": [
@@ -1305,5 +1485,10 @@
       "details": "Periodic database state snapshot automatically compiled.",
       "operator": "System"
     }
-  ]
+  ],
+  "finances": [],
+  "hr": {
+    "payroll": [],
+    "appraisals": []
+  }
 }

@@ -44,7 +44,6 @@ import {
   FileText,
   ChevronDown
 } from 'lucide-react';
-import { generateReportCardHTML, printDocument } from '../lib/printUtils';
 import app from '../lib/firebase';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 

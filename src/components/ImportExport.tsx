@@ -16,7 +16,11 @@ import {
   Sparkles,
   X,
   Info,
-  BookOpen
+  BookOpen,
+  Cloud,
+  CloudOff,
+  WifiOff,
+  Activity
 } from 'lucide-react';
 
 interface StagedRowValidation {
@@ -32,11 +36,20 @@ interface ImportExportProps {
   onUpdateLearners: (learners: Learner[]) => void;
   onImportScores: (scores: { [compositeKey: string]: ScoreRecord }) => void;
   onResetData: () => void;
+  onImportStaff?: (staff: any[]) => void;
+  onImportTimetable?: (slots: any[]) => void;
 }
 
-export default function ImportExport({ data, onUpdateLearners, onImportScores, onResetData }: ImportExportProps) {
+export default function ImportExport({ 
+  data, 
+  onUpdateLearners, 
+  onImportScores, 
+  onResetData,
+  onImportStaff,
+  onImportTimetable
+}: ImportExportProps) {
   const [dragActive, setDragActive] = useState(false);
-  const [importType, setImportType] = useState<'learners' | 'scores' | 'finances'>('learners');
+  const [importType, setImportType] = useState<'learners' | 'scores' | 'finances' | 'staff' | 'timetable'>('learners');
   const [selectedClass, setSelectedClass] = useState(ALL_CLASSES[0]);
   const [selectedExamSet, setSelectedExamSet] = useState(data.settings.examSets[0]?.id || '');
   const [includeCurrentScores, setIncludeCurrentScores] = useState(true);
@@ -44,12 +57,151 @@ export default function ImportExport({ data, onUpdateLearners, onImportScores, o
   const [showGuideModal, setShowGuideModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [lastSyncTick, setLastSyncTick] = useState(0);
+  const [workOffline, setWorkOffline] = useState(() => {
+    return localStorage.getItem('otec_work_offline') === 'true' || !dataManager.isSyncEnabled();
+  });
+
+  const syncState = dataManager.getSyncStatus();
+
+  React.useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    // Interval to refresh the human readable last sync text e.g. "5s ago"
+    const timer = setInterval(() => {
+      setLastSyncTick(t => t + 1);
+    }, 15000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(timer);
+    };
+  }, []);
+
+  const handleToggleWorkOffline = (offline: boolean) => {
+    setWorkOffline(offline);
+    localStorage.setItem('otec_work_offline', offline ? 'true' : 'false');
+    dataManager.setSyncEnabled(!offline);
+
+    if (offline) {
+      window.dispatchEvent(new CustomEvent('otec-toast', {
+        detail: {
+          message: 'Work Offline mode active. Cloud auto-sync is suspended and all edits are stored locally.',
+          type: 'info'
+        }
+      }));
+    } else {
+      window.dispatchEvent(new CustomEvent('otec-toast', {
+        detail: {
+          message: 'Work Offline disabled. Restoring cloud connectivity and syncing changes...',
+          type: 'success'
+        }
+      }));
+      handleManualSync();
+    }
+  };
+
+  const handleManualSync = async () => {
+    if (workOffline) {
+      setWorkOffline(false);
+      localStorage.setItem('otec_work_offline', 'false');
+      dataManager.setSyncEnabled(true);
+    } else if (!dataManager.isSyncEnabled()) {
+      dataManager.setSyncEnabled(true);
+    }
+
+    window.dispatchEvent(new CustomEvent('otec-toast', {
+      detail: {
+        message: 'Syncing local database with cloud storage...',
+        type: 'info'
+      }
+    }));
+
+    try {
+      await dataManager.forceSync();
+      setLastSyncTick(t => t + 1);
+      window.dispatchEvent(new CustomEvent('otec-toast', {
+        detail: {
+          message: 'Manual sync completed successfully!',
+          type: 'success'
+        }
+      }));
+    } catch (err: any) {
+      window.dispatchEvent(new CustomEvent('otec-toast', {
+        detail: {
+          message: 'Sync failed: ' + (err?.message || 'Check network connection'),
+          type: 'warning'
+        }
+      }));
+    }
+  };
+
+  const lastSync = dataManager.getLastSyncedTime();
+  const formatLastSync = () => {
+    if (!lastSync) return 'Never';
+    try {
+      const date = new Date(lastSync);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      if (diffMs < 10000) return 'Just now';
+      if (diffMs < 60000) return `${Math.floor(diffMs / 1000)}s ago`;
+      if (diffMs < 3600000) return `${Math.floor(diffMs / 60000)}m ago`;
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return 'Never';
+    }
+  };
+
+  const getStatusConfig = () => {
+    if (workOffline) {
+      return { 
+        icon: WifiOff, 
+        text: 'Work Offline (Forced)', 
+        color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' 
+      };
+    }
+    switch (syncState) {
+      case 'synced':
+        return { 
+          icon: Cloud, 
+          text: 'Cloud Active', 
+          color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' 
+        };
+      case 'syncing':
+        return { 
+          icon: RefreshCw, 
+          text: 'Syncing...', 
+          color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' 
+        };
+      case 'error':
+        return { 
+          icon: CloudOff, 
+          text: 'Sync Error', 
+          color: 'text-rose-400 bg-rose-500/10 border-rose-500/20' 
+        };
+      case 'offline':
+      default:
+        return { 
+          icon: CloudOff, 
+          text: 'Offline Mode', 
+          color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' 
+        };
+    }
+  };
+
+  const statusConfig = getStatusConfig();
+
   // Real-time validation layer and staging states
   const [stagedFileName, setStagedFileName] = useState<string>('');
   const [stagedRows, setStagedRows] = useState<any[] | null>(null);
   const [stagedHeaders, setStagedHeaders] = useState<string[]>([]);
   const [stagedValidations, setStagedValidations] = useState<StagedRowValidation[]>([]);
-  const [stagedType, setStagedType] = useState<'learners' | 'scores' | 'finances' | null>(null);
+  const [stagedType, setStagedType] = useState<'learners' | 'scores' | 'finances' | 'staff' | 'timetable' | null>(null);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -77,7 +229,7 @@ export default function ImportExport({ data, onUpdateLearners, onImportScores, o
     }
   };
 
-  const validateExcelData = (sheet: XLSX.WorkSheet, type: 'learners' | 'scores' | 'finances'): { valid: boolean; errors: string[] } => {
+  const validateExcelData = (sheet: XLSX.WorkSheet, type: 'learners' | 'scores' | 'finances' | 'staff' | 'timetable'): { valid: boolean; errors: string[] } => {
     const errors: string[] = [];
     
     // Get headers
@@ -132,6 +284,22 @@ export default function ImportExport({ data, onUpdateLearners, onImportScores, o
           }
         }
       });
+    }
+
+    if (type === 'staff') {
+      const hasName = headersLower.some(h => ['name', 'full name', 'first name'].includes(h));
+      const hasRole = headersLower.some(h => ['role', 'title', 'job title', 'position', 'type'].includes(h));
+      if (!hasName || !hasRole) {
+        errors.push("Missing required headers for Staff. Please include 'Name' and 'Role/Title'.");
+      }
+    }
+
+    if (type === 'timetable') {
+      const required = ['class', 'day', 'start time', 'end time', 'subject'];
+      const missing = required.filter(r => !headersLower.some(h => h.includes(r)));
+      if (missing.length > 0) {
+        errors.push(`Missing required headers for Timetable: ${missing.join(', ')}`);
+      }
     }
 
     if (type === 'scores') {
@@ -433,7 +601,7 @@ export default function ImportExport({ data, onUpdateLearners, onImportScores, o
               data: row
             });
           });
-        } else {
+        } else if (importType === 'finances') {
           rows.forEach((row, idx) => {
             const rowNum = idx + 2;
             const messages: string[] = [];
@@ -470,6 +638,73 @@ export default function ImportExport({ data, onUpdateLearners, onImportScores, o
                 status = 'warning';
                 messages.push(`Linked Student lookup "${lookupStudent}" was not found in register database (will import as general transaction).`);
               }
+            }
+
+            validations.push({
+              rowNum,
+              identifier,
+              status,
+              messages,
+              data: row
+            });
+          });
+        } else if (importType === 'staff') {
+          rows.forEach((row, idx) => {
+            const rowNum = idx + 2;
+            const messages: string[] = [];
+            let status: 'valid' | 'invalid' | 'warning' = 'valid';
+
+            const name = row['Name'] || row['name'] || row['Full Name'] || row['full name'] || row['First Name'] || row['first name'];
+            const role = row['Role'] || row['role'] || row['Title'] || row['title'] || row['Job Title'] || row['job title'];
+            
+            const identifier = name ? String(name) : `Row ${rowNum}`;
+
+            if (!name || String(name).trim() === '') {
+              status = 'invalid';
+              messages.push("Staff Name is required.");
+            }
+            if (!role || String(role).trim() === '') {
+              status = 'invalid';
+              messages.push("Role/Title is required.");
+            }
+
+            validations.push({
+              rowNum,
+              identifier,
+              status,
+              messages,
+              data: row
+            });
+          });
+        } else if (importType === 'timetable') {
+          rows.forEach((row, idx) => {
+            const rowNum = idx + 2;
+            const messages: string[] = [];
+            let status: 'valid' | 'invalid' | 'warning' = 'valid';
+
+            const cls = row['Class'] || row['class'];
+            const day = row['Day'] || row['day'];
+            const startTime = row['Start Time'] || row['start time'] || row['StartTime'];
+            const endTime = row['End Time'] || row['end time'] || row['EndTime'];
+            const subject = row['Subject'] || row['subject'];
+            
+            const identifier = cls ? `${cls} (${day || '?'})` : `Row ${rowNum}`;
+
+            if (!cls || String(cls).trim() === '') {
+              status = 'invalid';
+              messages.push("Class is required.");
+            }
+            if (!day || String(day).trim() === '') {
+              status = 'invalid';
+              messages.push("Day is required.");
+            }
+            if (!startTime || !endTime) {
+              status = 'invalid';
+              messages.push("Start Time and End Time are required.");
+            }
+            if (!subject || String(subject).trim() === '') {
+              status = 'invalid';
+              messages.push("Subject is required.");
             }
 
             validations.push({
@@ -519,6 +754,12 @@ export default function ImportExport({ data, onUpdateLearners, onImportScores, o
       importScoresFromRows(rowsToImport);
     } else if (stagedType === 'finances') {
       importFinancesFromRows(rowsToImport);
+    } else if (stagedType === 'staff') {
+      if (onImportStaff) onImportStaff(rowsToImport);
+      setImportLog([{ success: true, msg: `Successfully imported ${rowsToImport.length} staff records.` }]);
+    } else if (stagedType === 'timetable') {
+      if (onImportTimetable) onImportTimetable(rowsToImport);
+      setImportLog([{ success: true, msg: `Successfully imported ${rowsToImport.length} timetable slots.` }]);
     }
 
     // Reset staged validation values
@@ -806,6 +1047,149 @@ export default function ImportExport({ data, onUpdateLearners, onImportScores, o
 
     logs.unshift({ success: true, msg: `Successfully imported ${count} financial transaction record(s) totaling ${totalAmt.toLocaleString()} UGX.` });
     setImportLog(logs);
+  };
+
+  const importStaffFromRows = (rows: any[]) => {
+    const logs: { success: boolean; msg: string }[] = [];
+    const newSettings = { ...data.settings };
+    let teacherCount = 0;
+    let nonTeachingCount = 0;
+
+    const currentTeachers = [...(newSettings.teachersList || [])];
+    const currentNonTeaching = [...(newSettings.nonTeachingStaffList || [])];
+
+    rows.forEach((row, idx) => {
+      const name = row['Name'] || row['name'] || row['Full Name'] || row['full name'] || row['First Name'] || row['first name'];
+      const role = row['Role'] || row['role'] || row['Title'] || row['title'] || row['Job Title'] || row['job title'];
+      const phone = row['Phone'] || row['phone'] || '';
+      const email = row['Email'] || row['email'] || '';
+      
+      if (!name || !role) return;
+
+      const isTeacher = String(role).toLowerCase().includes('teacher') || String(role).toLowerCase().includes('master');
+      
+      if (isTeacher) {
+        currentTeachers.push({
+          id: 'TCH-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+          name: String(name),
+          subjects: [],
+          classes: [],
+          phone: String(phone),
+          email: String(email),
+          role: String(role)
+        });
+        teacherCount++;
+      } else {
+        currentNonTeaching.push({
+          id: 'NTS-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+          name: String(name),
+          role: String(role),
+          phone: String(phone),
+          email: String(email)
+        });
+        nonTeachingCount++;
+      }
+    });
+
+    newSettings.teachersList = currentTeachers;
+    newSettings.nonTeachingStaffList = currentNonTeaching;
+    dataManager.updateSettings(newSettings);
+    
+    logs.push({ success: true, msg: `Imported ${teacherCount} teachers and ${nonTeachingCount} non-teaching staff successfully.` });
+    dataManager.addActivityLog('data_imported', `Imported ${teacherCount} teachers and ${nonTeachingCount} non-teaching staff from spreadsheet.`);
+    setImportLog(logs);
+  };
+
+  const importTimetableFromRows = (rows: any[]) => {
+    const logs: { success: boolean; msg: string }[] = [];
+    const currentTimetable = { ...data.timetable };
+    const currentSlots = [...(currentTimetable.slots || [])];
+    let count = 0;
+
+    rows.forEach((row, idx) => {
+      const cls = row['Class'] || row['class'];
+      const day = row['Day'] || row['day'];
+      const startTime = row['Start Time'] || row['start time'] || row['StartTime'];
+      const endTime = row['End Time'] || row['end time'] || row['EndTime'];
+      const subject = row['Subject'] || row['subject'];
+      const teacherName = row['Teacher'] || row['teacher'] || '';
+      const roomId = row['Room'] || row['room'] || '';
+
+      if (!cls || !day || !startTime || !endTime || !subject) return;
+
+      // Find teacher ID if name provided
+      let teacherId = '';
+      if (teacherName) {
+        const teacher = (data.settings.teachersList || []).find(t => t.name.toLowerCase() === String(teacherName).toLowerCase());
+        if (teacher) teacherId = teacher.id;
+      }
+
+      currentSlots.push({
+        id: 'ts-' + Math.random().toString(36).substr(2, 6),
+        classId: String(cls),
+        dayOfWeek: String(day) as any,
+        startTime: String(startTime),
+        endTime: String(endTime),
+        subjectId: String(subject),
+        teacherId,
+        roomId: String(roomId)
+      });
+      count++;
+    });
+
+    currentTimetable.slots = currentSlots;
+    dataManager.updateTimetableData(currentTimetable);
+    
+    logs.push({ success: true, msg: `Imported ${count} timetable slots successfully.` });
+    dataManager.addActivityLog('data_imported', `Imported ${count} timetable slots from spreadsheet.`);
+    setImportLog(logs);
+  };
+
+  const downloadStaffTemplate = () => {
+    const wsData = [
+      {
+        'Name': 'John Doe',
+        'Role': 'Senior Teacher',
+        'Phone': '0772123456',
+        'Email': 'john.doe@example.com'
+      }
+    ];
+    const ws = XLSX.utils.json_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, 'OTEC_Staff_Template.xlsx');
+    
+    window.dispatchEvent(new CustomEvent('otec-toast', {
+      detail: {
+        message: 'Staff import template downloaded successfully!',
+        type: 'success'
+      }
+    }));
+  };
+
+  const downloadTimetableTemplate = () => {
+    const wsData = [
+      {
+        'Class': 'P7',
+        'Day': 'Monday',
+        'Start Time': '08:00',
+        'End Time': '09:00',
+        'Subject': 'Mathematics',
+        'Teacher': 'John Doe',
+        'Room': 'Block A'
+      }
+    ];
+    const ws = XLSX.utils.json_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, 'OTEC_Timetable_Template.xlsx');
+    
+    window.dispatchEvent(new CustomEvent('otec-toast', {
+      detail: {
+        message: 'Timetable import template downloaded successfully!',
+        type: 'success'
+      }
+    }));
   };
 
   const downloadFinanceTemplate = () => {
@@ -1107,6 +1491,26 @@ export default function ImportExport({ data, onUpdateLearners, onImportScores, o
               >
                 3. Import Finances
               </button>
+              <button 
+                onClick={() => { setImportType('staff'); setImportLog([]); }}
+                className={`px-3 py-1.5 rounded-lg border transition-all ${
+                  importType === 'staff' 
+                    ? 'bg-blue-600 border-blue-600 text-white font-bold' 
+                    : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                4. Import Staff
+              </button>
+              <button 
+                onClick={() => { setImportType('timetable'); setImportLog([]); }}
+                className={`px-3 py-1.5 rounded-lg border transition-all ${
+                  importType === 'timetable' 
+                    ? 'bg-blue-600 border-blue-600 text-white font-bold' 
+                    : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                5. Import Timetable
+              </button>
             </div>
           </div>
 
@@ -1338,6 +1742,22 @@ export default function ImportExport({ data, onUpdateLearners, onImportScores, o
               <span>Finances Ledger Template</span>
             </button>
 
+            <button
+              onClick={downloadStaffTemplate}
+              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-200/50"
+            >
+              <FileDown size={14} className="text-purple-600" />
+              <span>Staff Register Template</span>
+            </button>
+
+            <button
+              onClick={downloadTimetableTemplate}
+              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 border border-slate-200/50"
+            >
+              <FileDown size={14} className="text-teal-600" />
+              <span>Timetable Template</span>
+            </button>
+
             <div className="border-t border-slate-100 pt-3 space-y-2">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Academic Marks Sheet Template</label>
               
@@ -1434,13 +1854,102 @@ export default function ImportExport({ data, onUpdateLearners, onImportScores, o
               <RefreshCw size={12} />
               <span>Reset Database to Defaults</span>
             </button>
+            <div className="pt-3 border-t border-rose-100">
+              <p className="text-[11px] text-rose-700 leading-relaxed mb-2 font-bold">
+                Wipe everything completely clean to start fresh with your own real data (No Demo Data).
+              </p>
+              <button
+                onClick={() => {
+                  const confirmed1 = confirm('WARNING: This will wipe EVERYTHING completely empty. You will lose all learners, scores, finances, and logs. This is for starting 100% fresh with your own data.');
+                  if (confirmed1) {
+                    const pwd = prompt('Type "WIPE" to confirm:');
+                    if (pwd === 'WIPE') {
+                      dataManager.wipeAllData();
+                      alert('Database wiped completely clean.');
+                      window.location.reload(); // Quickest way to force full app remount with empty state
+                    }
+                  }
+                }}
+                className="w-full py-2 bg-red-950 hover:bg-red-900 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1"
+              >
+                <AlertCircle size={12} />
+                <span>Wipe Database Completely Empty</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* System Local Backup & History Rollback snapshots */}
-      <div className="mt-8">
-        <BackupManager data={data} />
+      {/* Cloud Sync Center & Backup Snapshots */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+          <h3 className="text-lg font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
+            <Activity size={18} className="text-blue-600" />
+            Cloud Synchronization Engine
+          </h3>
+          <p className="text-sm text-slate-500 mb-4">
+            Manage your connection to the cloud storage and force synchronization.
+          </p>
+          
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className={`w-3 h-3 rounded-full ${workOffline ? 'bg-amber-500' : syncState === 'synced' ? 'bg-emerald-500' : syncState === 'syncing' ? 'bg-amber-500 animate-pulse' : 'bg-slate-500'}`} />
+              {syncState === 'syncing' && !workOffline && (
+                <span className="absolute -inset-1 rounded-full bg-amber-500/40 animate-ping" />
+              )}
+            </div>
+            <div className="flex flex-col">
+              <span className="font-bold text-slate-800">{statusConfig.text}</span>
+              <span className="text-xs text-slate-500 font-medium">Last Sync: {formatLastSync()}</span>
+            </div>
+          </div>
+
+          {/* Explicit Work Offline Toggle */}
+          <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2 mt-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <WifiOff size={16} className={workOffline ? "text-amber-500" : "text-slate-400"} />
+                <span className="text-slate-800 font-bold text-sm">Work Offline</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleToggleWorkOffline(!workOffline)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                  workOffline ? 'bg-amber-500' : 'bg-slate-300'
+                }`}
+                role="switch"
+                aria-checked={workOffline}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out ${
+                    workOffline ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 font-medium leading-tight">
+              {workOffline 
+                ? "Local-only mode active. Edits will stay on this browser until synced."
+                : "Auto cloud sync active for live multi-browser updates."}
+            </p>
+          </div>
+
+          {/* Manual Sync Now Button */}
+          <button
+            type="button"
+            onClick={handleManualSync}
+            disabled={syncState === 'syncing'}
+            className="w-full mt-4 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <RefreshCw size={16} className={syncState === 'syncing' ? 'animate-spin text-white' : 'text-blue-100'} />
+            <span>{syncState === 'syncing' ? 'Synchronizing...' : 'Force Sync Now'}</span>
+          </button>
+        </div>
+
+        <div>
+          <BackupManager data={data} />
+        </div>
       </div>
 
       {/* GUIDED BATCH UPLOAD WIZARD MODAL */}
@@ -1502,6 +2011,22 @@ export default function ImportExport({ data, onUpdateLearners, onImportScores, o
                       >
                         <FileDown size={14} className="text-indigo-600" />
                         <span>Download School Finances Ledger Template</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { downloadStaffTemplate(); }}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl border border-slate-200/60 transition-all cursor-pointer text-xs"
+                      >
+                        <FileDown size={14} className="text-purple-600" />
+                        <span>Download Staff Register Template</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { downloadTimetableTemplate(); }}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl border border-slate-200/60 transition-all cursor-pointer text-xs"
+                      >
+                        <FileDown size={14} className="text-teal-600" />
+                        <span>Download Timetable Template</span>
                       </button>
                     </div>
                   </div>

@@ -9,14 +9,28 @@ if not exist ".git\" (
     git branch -M main
 )
 
-:: Add all changes
-echo Adding changes...
-git add .
+:: Show what changed
+echo ======================================
+echo COMPARING NEW UPDATES (GIT STATUS):
+echo ======================================
+git status
+echo ======================================
 
-:: Commit changes
-for /f "tokens=1-4 delims=/ " %%i in ("%date%") do set "ds=%%k-%%j-%%i"
-for /f "tokens=1-3 delims=/:." %%i in ("%time%") do set "ts=%%i:%%j:%%k"
-git commit -m "Auto-sync backup at %ds% %ts%"
+:: Check if there are changes to commit
+set HAS_CHANGES=
+for /f "tokens=*" %%i in ('git status --porcelain') do set HAS_CHANGES=1
+
+if defined HAS_CHANGES (
+    echo Changes detected! Adding changes...
+    git add .
+    
+    :: Commit changes
+    for /f "tokens=1-4 delims=/ " %%i in ("%date%") do set "ds=%%k-%%j-%%i"
+    for /f "tokens=1-3 delims=/:." %%i in ("%time%") do set "ts=%%i:%%j:%%k"
+    git commit -m "Auto-sync backup at %ds% %ts%"
+) else (
+    echo No local changes to commit.
+)
 
 :: Pull remote changes if origin is set
 git remote -v | find "origin" > nul

@@ -55,6 +55,7 @@ import {
   CloudUpload,
   RefreshCw
 } from 'lucide-react';
+import GlobalFilterBar from './ui/GlobalFilterBar';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -73,7 +74,7 @@ import {
 
 export interface FinanceCategory {
   name: string;
-  type: 'income' | 'expense';
+  type: 'income' | 'expense' | 'refund';
   color: string; // 'emerald', 'rose', 'blue', etc.
   budgetLimit?: number;
 }
@@ -1175,7 +1176,7 @@ export function MonthlyExcelBudgetAndBalanceSheetCard({
     initialMonth || new Date().toISOString().slice(0, 7)
   );
 
-  const [activeTab, setActiveTab] = useState<'budget' | 'balanceSheet'>('budget');
+  const [activeTab, setActiveTab] = useState<'summary' | 'budget' | 'balanceSheet'>('summary');
 
   const monthlyTxs = useMemo(() => {
     return transactions.filter(tx => 
@@ -1292,6 +1293,41 @@ export function MonthlyExcelBudgetAndBalanceSheetCard({
       totalLiabilitiesAndEquity: currentLiabilities + totalEquity
     };
   }, [cumulativeTxs, learners, totalExpense, netSurplus]);
+
+  const otecSummary = useMemo(() => {
+    const incStudent = ['Tuition Fees', 'Registration Fees', 'Uniform Sales', 'Book Covers', 'Library Fees', 'Escorts/Transport', 'Mock Exams', 'PLE Fees', 'Holiday Packages', 'Special Programs'];
+    const incInst = ['Commissions', 'Canteen', 'Parking', 'General Income'];
+    const incFund = ['SACCO'];
+
+    const expAcademic = ['Educational Materials', 'Exams/Testing', 'Co-curricular', 'Medical/First Aid'];
+    const expPersonnel = ['Teacher Salaries', 'Support Staff Salaries'];
+    const expOps = ['Meal Provisions', 'Vehicle Fuel', 'Escorts/Transport', 'Electricity', 'Water', 'Cleaning/Sanitation'];
+    const expInfra = ['Building Repairs', 'Plumbing', 'Furniture'];
+    const expAdmin = ['Office Supplies/Printing', 'Uniforms & Clothing'];
+
+    const sumCat = (cats: string[]) => cats.reduce((s, c) => s + (incomeBreakdown.find(i => i.name === c)?.actual || 0) + (expenseBreakdown.find(e => e.name === c)?.actual || 0), 0);
+
+    const studentIncome = sumCat(incStudent);
+    const instIncome = sumCat(incInst);
+    const fundIncome = sumCat(incFund);
+
+    const academicExp = sumCat(expAcademic);
+    const personnelExp = sumCat(expPersonnel);
+    const opsExp = sumCat(expOps);
+    const infraExp = sumCat(expInfra);
+    const adminExp = sumCat(expAdmin);
+
+    // Using real totalIncome and totalExpense for precise ratio math (includes any 'Other' categories)
+    const opEfficiency = totalIncome > 0 ? (totalExpense / totalIncome) * 100 : 0;
+    const personnelBurden = totalExpense > 0 ? (personnelExp / totalExpense) * 100 : 0;
+    const academicInvest = totalExpense > 0 ? (academicExp / totalExpense) * 100 : 0;
+
+    return {
+      studentIncome, instIncome, fundIncome,
+      academicExp, personnelExp, opsExp, infraExp, adminExp,
+      opEfficiency, personnelBurden, academicInvest
+    };
+  }, [incomeBreakdown, expenseBreakdown, totalIncome, totalExpense]);
 
   const handleDownloadExcel = () => {
     exportMonthlyExcelBudgetReport(
@@ -1438,6 +1474,19 @@ export function MonthlyExcelBudgetAndBalanceSheetCard({
       <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
         <button
           type="button"
+          onClick={() => setActiveTab('summary')}
+          className={`px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+            activeTab === 'summary'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          <FileSpreadsheet size={14} />
+          <span>OTEC Financial Summary</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('budget')}
           className={`px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'budget'
@@ -1462,6 +1511,100 @@ export function MonthlyExcelBudgetAndBalanceSheetCard({
           <span>Balance Sheet Statement</span>
         </button>
       </div>
+
+      {/* Tab Content 0: OTEC Summary */}
+      {activeTab === 'summary' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Income Summary */}
+            <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-5">
+              <h4 className="text-emerald-800 font-black uppercase tracking-wider text-xs mb-4 flex items-center gap-2">
+                <ArrowDownToLine size={14} />
+                Monthly Income Breakdown
+              </h4>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-sm font-semibold text-slate-700">
+                  <span>Student-Related</span>
+                  <span className="font-mono font-bold text-emerald-700">{formatUGX(otecSummary.studentIncome)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm font-semibold text-slate-700">
+                  <span>Institutional</span>
+                  <span className="font-mono font-bold text-emerald-700">{formatUGX(otecSummary.instIncome)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm font-semibold text-slate-700">
+                  <span>Fundraising</span>
+                  <span className="font-mono font-bold text-emerald-700">{formatUGX(otecSummary.fundIncome)}</span>
+                </div>
+                <div className="pt-3 mt-3 border-t border-emerald-200/60 flex justify-between items-center text-sm">
+                  <span className="font-black text-slate-800">Total Income</span>
+                  <span className="font-mono font-black text-emerald-800 text-base">{formatUGX(totalIncome)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Expense Summary */}
+            <div className="bg-rose-50/50 border border-rose-100 rounded-2xl p-5">
+              <h4 className="text-rose-800 font-black uppercase tracking-wider text-xs mb-4 flex items-center gap-2">
+                <ArrowUpFromLine size={14} />
+                Monthly Expense Breakdown
+              </h4>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-sm font-semibold text-slate-700">
+                  <span>Academic/Student</span>
+                  <span className="font-mono font-bold text-rose-700">{formatUGX(otecSummary.academicExp)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm font-semibold text-slate-700">
+                  <span>Personnel</span>
+                  <span className="font-mono font-bold text-rose-700">{formatUGX(otecSummary.personnelExp)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm font-semibold text-slate-700">
+                  <span>Operations</span>
+                  <span className="font-mono font-bold text-rose-700">{formatUGX(otecSummary.opsExp)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm font-semibold text-slate-700">
+                  <span>Infrastructure</span>
+                  <span className="font-mono font-bold text-rose-700">{formatUGX(otecSummary.infraExp)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm font-semibold text-slate-700">
+                  <span>Administrative</span>
+                  <span className="font-mono font-bold text-rose-700">{formatUGX(otecSummary.adminExp)}</span>
+                </div>
+                <div className="pt-3 mt-3 border-t border-rose-200/60 flex justify-between items-center text-sm">
+                  <span className="font-black text-slate-800">Total Expenses</span>
+                  <span className="font-mono font-black text-rose-800 text-base">{formatUGX(totalExpense)}</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Key Financial Ratios */}
+          <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-5 mt-6">
+            <h4 className="text-blue-800 font-black uppercase tracking-wider text-xs mb-4 flex items-center gap-2">
+              <Activity size={14} />
+              Key Financial Ratios
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white rounded-xl p-4 border border-blue-100 shadow-xs">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Operational Efficiency</span>
+                <span className="text-xl font-black text-blue-700">{otecSummary.opEfficiency.toFixed(1)}%</span>
+                <span className="text-[10px] text-slate-400 block mt-1">Expenses ÷ Income (Target: {'<'} 80%)</span>
+              </div>
+              <div className="bg-white rounded-xl p-4 border border-blue-100 shadow-xs">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Personnel Burden</span>
+                <span className="text-xl font-black text-indigo-700">{otecSummary.personnelBurden.toFixed(1)}%</span>
+                <span className="text-[10px] text-slate-400 block mt-1">Salaries ÷ Expenses (Target: 40-50%)</span>
+              </div>
+              <div className="bg-white rounded-xl p-4 border border-blue-100 shadow-xs">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Academic Investment</span>
+                <span className="text-xl font-black text-purple-700">{otecSummary.academicInvest.toFixed(1)}%</span>
+                <span className="text-[10px] text-slate-400 block mt-1">Academic ÷ Expenses (Target: {'>'} 20%)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tab Content 1: Category Budget vs Actuals */}
       {activeTab === 'budget' && (
@@ -1997,116 +2140,78 @@ export default function FinanceManager({ data }: FinanceManagerProps) {
 
   // Dynamic Categories management
   const defaultCategories: FinanceCategory[] = [
-    { name: 'Tuition Fees', type: 'income', color: 'emerald' },
-    { name: 'Boarding Fees', type: 'income', color: 'teal' },
-    { name: 'Class Uniform', type: 'income', color: 'indigo' },
-    { name: 'Van / Transport Fees', type: 'income', color: 'blue' },
-    { name: 'Sweater Uniform', type: 'income', color: 'purple' },
-    { name: 'Sports Wear', type: 'income', color: 'cyan' },
-    { name: 'Registration Fees', type: 'income', color: 'amber' },
-    { name: 'Exam Fees', type: 'income', color: 'indigo' },
-    { name: 'Workbooks', type: 'income', color: 'teal' },
-    { name: 'Stationery Store', type: 'income', color: 'purple' },
-    { name: 'Donations', type: 'income', color: 'cyan' },
-    { name: 'School Canteen', type: 'income', color: 'amber' },
-    { name: 'Other Income', type: 'income', color: 'slate' },
-
-    { name: 'Medical', type: 'expense', color: 'emerald' },
-    { name: 'Compound Maintenance', type: 'expense', color: 'blue' },
-    { name: 'Slashing', type: 'expense', color: 'amber' },
-    { name: 'Flowers', type: 'expense', color: 'pink' },
-    { name: 'District Fees', type: 'expense', color: 'purple' },
-    { name: 'Transport', type: 'expense', color: 'indigo' },
-    { name: 'Airtime', type: 'expense', color: 'teal' },
-    { name: 'Electricity', type: 'expense', color: 'orange' },
-    { name: 'Workbooks', type: 'expense', color: 'cyan' },
-    { name: 'Exam Fees', type: 'expense', color: 'indigo' },
-    { name: 'Wages', type: 'expense', color: 'rose' },
-    { name: 'Plumbing', type: 'expense', color: 'blue' },
-    { name: 'Fuel', type: 'expense', color: 'orange' },
-    { name: 'Repair & Maintenance', type: 'expense', color: 'slate' },
+    // STUDENT FEES & REGISTRATION
+    { name: 'Registration Fees', type: 'income', color: 'emerald' },
+    { name: 'Uniform Sales', type: 'income', color: 'indigo' },
+    { name: 'Holiday Packages', type: 'income', color: 'teal' },
+    { name: 'Sports Wear', type: 'income', color: 'blue' },
+    { name: 'Book Covers', type: 'income', color: 'purple' },
+    
+    // INSTITUTIONAL INCOME
+    { name: 'General Income', type: 'income', color: 'emerald' },
+    { name: 'PLE Fees', type: 'income', color: 'amber' },
+    { name: 'Mock Exams', type: 'income', color: 'amber' },
+    { name: 'Special Programs', type: 'income', color: 'teal' },
+    
+    // FUNDRAISING & GRANTS
+    { name: 'SACCO', type: 'income', color: 'cyan' },
+    { name: 'Library Fees', type: 'income', color: 'blue' },
+    { name: 'Commissions', type: 'income', color: 'emerald' },
+    
+    // OPERATIONAL REVENUE
+    { name: 'Canteen', type: 'income', color: 'orange' },
+    { name: 'Parking', type: 'income', color: 'slate' },
+    
+    // PERSONNEL (Staff)
     { name: 'Teacher Salaries', type: 'expense', color: 'rose' },
-    { name: 'Food & Meals', type: 'expense', color: 'orange' },
-    { name: 'Utilities', type: 'expense', color: 'pink' },
-    { name: 'Stationery Purchases', type: 'expense', color: 'purple' },
-    { name: 'Sports Equipment', type: 'expense', color: 'teal' },
-    { name: 'Other Expense', type: 'expense', color: 'slate' }
+    { name: 'Staff Transport', type: 'expense', color: 'indigo' },
+    { name: 'Staff Facilitation', type: 'expense', color: 'teal' },
+    { name: 'Communications', type: 'expense', color: 'cyan' },
+    
+    // STUDENT WELFARE
+    { name: 'Meal Provisions', type: 'expense', color: 'orange' },
+    { name: 'Breakfast/Snacks', type: 'expense', color: 'amber' },
+    { name: 'Drinking Water', type: 'expense', color: 'blue' },
+    { name: 'Beverages/Juice', type: 'expense', color: 'pink' },
+    
+    // INFRASTRUCTURE
+    { name: 'Building Repairs', type: 'expense', color: 'slate' },
+    { name: 'Electrical', type: 'expense', color: 'yellow' },
+    { name: 'Plumbing', type: 'expense', color: 'blue' },
+    { name: 'Painting/Maintenance', type: 'expense', color: 'cyan' },
+    { name: 'Labor', type: 'expense', color: 'slate' },
+    
+    // UTILITIES
+    { name: 'Electricity', type: 'expense', color: 'yellow' },
+    { name: 'Internet', type: 'expense', color: 'blue' },
+    { name: 'Water', type: 'expense', color: 'cyan' },
+    
+    // SUPPLIES
+    { name: 'Cleaning Materials', type: 'expense', color: 'emerald' },
+    { name: 'Educational Materials', type: 'expense', color: 'purple' },
+    { name: 'Uniforms & Clothing', type: 'expense', color: 'pink' },
+    { name: 'Stationery', type: 'expense', color: 'amber' },
+    
+    // TRANSPORTATION
+    { name: 'Vehicle Fuel', type: 'expense', color: 'orange' },
+    { name: 'Vehicle Maintenance', type: 'expense', color: 'slate' },
+    { name: 'Escorts/Transport', type: 'expense', color: 'indigo' },
+    
+    // EVENTS & PROFESSIONAL
+    { name: 'Meetings', type: 'expense', color: 'purple' },
+    { name: 'Exams/Testing', type: 'expense', color: 'rose' },
+    { name: 'Consultants/Services', type: 'expense', color: 'slate' },
+    
+    // MISCELLANEOUS
+    { name: 'Other Expenses', type: 'expense', color: 'slate' }
   ];
 
-  const [categories, setCategories] = useState<FinanceCategory[]>(() => {
-    const saved = localStorage.getItem('otec_finance_categories');
-    if (saved) {
-      try {
-        const parsed: FinanceCategory[] = JSON.parse(saved);
-        const existingNames = new Set(parsed.map(c => c.name.toLowerCase()));
-        const missingDefaults = defaultCategories.filter(d => !existingNames.has(d.name.toLowerCase()));
-        if (missingDefaults.length > 0) {
-          const merged = [...parsed, ...missingDefaults];
-          localStorage.setItem('otec_finance_categories', JSON.stringify(merged));
-          return merged;
-        }
-        return parsed;
-      } catch (e) {
-        // Fallback
-      }
-    }
-    return defaultCategories;
-  });
+  const categories: FinanceCategory[] = data.settings.financeCategories && data.settings.financeCategories.length > 0 
+    ? data.settings.financeCategories.map(c => ({ name: c.name, type: c.type as any, color: c.color || 'blue' }))
+    : defaultCategories;
 
   const [showCategoryModal, setShowCategoryModal] = useState(false);
 
-  // Form states for creating a new category
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatType, setNewCatType] = useState<'income' | 'expense'>('income');
-  const [newCatColor, setNewCatColor] = useState('emerald');
-
-  const updateCategoriesList = (newList: FinanceCategory[]) => {
-    setCategories(newList);
-    localStorage.setItem('otec_finance_categories', JSON.stringify(newList));
-  };
-
-  const handleAddCategory = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanName = newCatName.trim();
-    if (!cleanName) return;
-
-    if (categories.some(c => c.name.toLowerCase() === cleanName.toLowerCase())) {
-      alert('A category with this name already exists.');
-      return;
-    }
-
-    const updated = [...categories, {
-      name: cleanName,
-      type: newCatType,
-      color: newCatColor
-    }];
-    updateCategoriesList(updated);
-    setNewCatName('');
-    alert(`Category "${cleanName}" added successfully.`);
-  };
-
-  const handleDeleteCategory = (catName: string) => {
-    const matchingTxsCount = transactions.filter(tx => tx.category === catName).length;
-    if (matchingTxsCount > 0) {
-      const confirmDelete = window.confirm(
-        `Warning: There are ${matchingTxsCount} transactions currently registered under "${catName}". ` +
-        `Deleting this category will leave those transactions uncategorized (they will default to a slate tag). ` +
-        `Are you sure you want to proceed?`
-      );
-      if (!confirmDelete) return;
-    } else {
-      const confirmDelete = window.confirm(`Are you sure you want to delete the category "${catName}"?`);
-      if (!confirmDelete) return;
-    }
-
-    const updated = categories.filter(c => c.name !== catName);
-    updateCategoriesList(updated);
-  };
-
-  const handleUpdateCategoryColor = (catName: string, newColor: string) => {
-    const updated = categories.map(c => c.name === catName ? { ...c, color: newColor } : c);
-    updateCategoriesList(updated);
-  };
 
   // Helper to dynamically get custom styling for a category
   const getCategoryColorStyles = (categoryName: string, fallbackType: 'income' | 'expense') => {
@@ -2319,7 +2424,11 @@ export default function FinanceManager({ data }: FinanceManagerProps) {
     .filter(tx => tx.type === 'expense')
     .reduce((sum, tx) => sum + tx.amount, 0);
 
-  const netBalance = totalIncome - totalExpense;
+  const totalRefund = transactions
+    .filter(tx => tx.type === 'refund')
+    .reduce((sum, tx) => sum + tx.amount, 0);
+
+  const netBalance = totalIncome - totalExpense - totalRefund;
 
   // Tuition fee collection stats
   const tuitionCollected = transactions
@@ -5562,14 +5671,7 @@ OTEC Academy Automated Finance Systems
                 <FileSpreadsheet size={14} className="text-emerald-600" />
                 <span>Export CSV</span>
               </button>
-              <button
-                onClick={() => setShowCategoryModal(true)}
-                className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl text-xs font-bold text-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                title="Manage Ledger Categories and Color Tags"
-              >
-                <Tag size={14} className="text-blue-600" />
-                <span>Manage Categories</span>
-              </button>
+
               <button
                 onClick={() => setShowAddModal(true)}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-blue-600/10"
@@ -6153,7 +6255,7 @@ OTEC Academy Automated Finance Systems
               {/* Type toggle */}
               <div className="space-y-1.5">
                 <label className="block font-bold text-slate-600 uppercase tracking-wider text-[10px]">Transaction Type</label>
-                <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+                <div className="grid grid-cols-3 gap-2 bg-slate-100 p-1 rounded-xl">
                   <button
                     type="button"
                     onClick={() => {
@@ -6161,13 +6263,13 @@ OTEC Academy Automated Finance Systems
                       const firstInc = categories.find(c => c.type === 'income')?.name || 'Tuition Fees';
                       setTxCategory(firstInc);
                     }}
-                    className={`py-2 text-center rounded-lg font-bold cursor-pointer transition-all ${
+                    className={`py-2 text-center rounded-lg font-bold text-[10px] cursor-pointer transition-all ${
                       txType === 'income' 
                         ? 'bg-white text-emerald-700 shadow-xs' 
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    Income (Inflow)
+                    Income (IN)
                   </button>
                   <button
                     type="button"
@@ -6176,13 +6278,28 @@ OTEC Academy Automated Finance Systems
                       const firstExp = categories.find(c => c.type === 'expense')?.name || 'Teacher Salaries';
                       setTxCategory(firstExp);
                     }}
-                    className={`py-2 text-center rounded-lg font-bold cursor-pointer transition-all ${
+                    className={`py-2 text-center rounded-lg font-bold text-[10px] cursor-pointer transition-all ${
                       txType === 'expense' 
                         ? 'bg-white text-rose-700 shadow-xs' 
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    Expense (Outflow)
+                    Expense (OUT)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTxType('refund');
+                      const firstInc = categories.find(c => c.type === 'income')?.name || 'Tuition Fees';
+                      setTxCategory(firstInc);
+                    }}
+                    className={`py-2 text-center rounded-lg font-bold text-[10px] cursor-pointer transition-all ${
+                      txType === 'refund' 
+                        ? 'bg-white text-amber-700 shadow-xs' 
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Refund (BACK)
                   </button>
                 </div>
               </div>
@@ -6195,9 +6312,9 @@ OTEC Academy Automated Finance Systems
                   onChange={(e) => setTxCategory(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-hidden focus:bg-white focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600 transition-all cursor-pointer"
                 >
-                  {txType === 'income' 
-                    ? incomeCategories.map(c => <option key={c} value={c}>{c}</option>)
-                    : expenseCategories.map(c => <option key={c} value={c}>{c}</option>)
+                  {txType === 'expense' 
+                    ? expenseCategories.map(c => <option key={c} value={c}>{c}</option>)
+                    : incomeCategories.map(c => <option key={c} value={c}>{c}</option>)
                   }
                 </select>
               </div>

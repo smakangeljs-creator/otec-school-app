@@ -5,10 +5,11 @@
   "type": "module",
   "main": "electron-main.cjs",
   "scripts": {
-    "dev": "vite",
-    "desktop:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev": "vite --host",
+    "desktop:dev": "concurrently \"vite\" \"wait-on http://localhost:5000 && electron .\"",
     "desktop:build:mac": "npm run build && electron-builder --mac",
     "desktop:build:win": "npm run build && electron-builder --win",
+    "mobile:build:android": "npx cap sync android && cd android && ./gradlew assembleDebug",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
@@ -20,6 +21,7 @@
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
+    "date-fns": "^3.6.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "firebase": "^12.15.0",

@@ -6,6 +6,7 @@ import { auth } from '../lib/firebase';
 import AuthModal from './AuthModal';
 import { motion } from 'motion/react';
 import { 
+  LayoutDashboard,
   Home, 
   Users, 
   FileSpreadsheet, 
@@ -16,15 +17,31 @@ import {
   CloudOff,
   RefreshCw,
   LogOut,
-  LogIn,
-  Sliders,
   Calendar,
   Wallet,
-  CreditCard,
+  ShieldCheck,
+  Truck,
+  BookOpen,
+  Archive,
+  BedDouble,
+  CalendarClock,
+  Stethoscope,
+  Scale,
+  Trophy,
+  UserSquare2,
+  Briefcase,
+  BarChart3,
+  Menu,
+  ChevronLeft,
+  UserPlus,
+  ShoppingCart,
+  MessageSquare,
+  Bot,
+  Bell,
   WifiOff,
-  Wifi,
+  LogIn,
   AlertTriangle,
-  ShieldCheck
+  ShieldAlert
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -33,12 +50,14 @@ interface SidebarProps {
   data: AppData;
   syncState: typeof syncStatus;
   user: typeof activeUser;
+  localUser: any;
 }
 
-export default function Sidebar({ currentRoute, setCurrentRoute, data, syncState, user }: SidebarProps) {
+export default function Sidebar({ currentRoute, setCurrentRoute, data, syncState, user, localUser }: SidebarProps) {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [lastSyncTick, setLastSyncTick] = useState(0);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [workOffline, setWorkOffline] = useState(() => {
     return localStorage.getItem('otec_work_offline') === 'true' || !dataManager.isSyncEnabled();
   });
@@ -178,16 +197,38 @@ export default function Sidebar({ currentRoute, setCurrentRoute, data, syncState
   };
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Home },
-    { id: 'learners', label: 'Learners', icon: Users },
-    { id: 'scores', label: 'Enter Scores', icon: FileSpreadsheet },
-    { id: 'reports', label: 'Report Cards', icon: GraduationCap },
-    { id: 'finance', label: 'School Finances', icon: Wallet },
-    { id: 'security', label: 'Security & Gate', icon: ShieldCheck },
-    { id: 'calendar', label: 'Academic Calendar', icon: Calendar },
-    { id: 'data', label: 'Import / Export', icon: Database },
-    { id: 'settings', label: 'Settings', icon: SettingsIcon },
-  ];
+    { id: 'dashboard', label: 'Dashboard Overview', icon: LayoutDashboard, roles: ['superuser', 'teacher', 'accountant', 'security'] },
+    { id: 'analytics', label: "Principal's Analytics", icon: BarChart3, roles: ['superuser'] },
+    { id: 'student-360', label: 'Student 360° Profile', icon: UserSquare2, roles: ['superuser', 'teacher', 'accountant'] },
+    { id: 'staff-360', label: 'Staff 360° Profile', icon: Briefcase, roles: ['superuser'] },
+    { id: 'hr', label: 'HR & Payroll', icon: Users, roles: ['superuser', 'accountant'] },
+    { id: 'admissions', label: 'Admissions & Enrollment', icon: UserPlus, roles: ['superuser', 'accountant'] },
+    { id: 'learners', label: 'Student Directory', icon: Users, roles: ['superuser', 'teacher', 'accountant'] },
+    { id: 'scores', label: 'Enter Scores', icon: FileSpreadsheet, roles: ['superuser', 'teacher'] },
+    { id: 'reports', label: 'Report Cards', icon: GraduationCap, roles: ['superuser', 'teacher'] },
+    { id: 'finance', label: 'School Finances', icon: Wallet, roles: ['superuser', 'accountant'] },
+    { id: 'security', label: 'Security & Gate', icon: ShieldCheck, roles: ['superuser', 'security'] },
+    { id: 'transport', label: 'Transport & Fleet', icon: Truck, roles: ['superuser', 'accountant', 'security'] },
+    { id: 'library', label: 'Library', icon: BookOpen, roles: ['superuser', 'teacher'] },
+    { id: 'inventory', label: 'Asset Inventory', icon: Archive, roles: ['superuser', 'accountant'] },
+    { id: 'procurement', label: 'Procurement', icon: ShoppingCart, roles: ['superuser', 'accountant'] },
+    { id: 'hostel', label: 'Hostels & Dorms', icon: BedDouble, roles: ['superuser', 'teacher'] },
+    { id: 'clinic', label: 'School Clinic', icon: Stethoscope, roles: ['superuser', 'teacher'] },
+    { id: 'discipline', label: 'Discipline', icon: Scale, roles: ['superuser', 'teacher', 'security'] },
+    { id: 'extracurricular', label: 'Extracurriculars', icon: Trophy, roles: ['superuser', 'teacher'] },
+    { id: 'timetable', label: 'Class Timetable', icon: CalendarClock, roles: ['superuser', 'teacher'] },
+    { id: 'teacher-attendance', label: 'Staff Attendance', icon: Users, roles: ['superuser', 'security', 'teacher'] },
+    { id: 'calendar', label: 'Academic Calendar', icon: Calendar, roles: ['superuser', 'teacher', 'accountant', 'security'] },
+    { id: 'data', label: 'Import / Export', icon: Database, roles: ['superuser'] },
+    { id: 'settings', label: 'Settings', icon: SettingsIcon, roles: ['superuser'] },
+    { id: 'communications', label: 'Communications', icon: MessageSquare, roles: ['superuser', 'teacher', 'accountant'] },
+    { id: 'ai-consultant', label: 'AI Consultant', icon: Bot, roles: ['superuser', 'accountant', 'teacher'] },
+    { id: 'notifications', label: 'System Logs', icon: Bell, roles: ['superuser'] },
+    { id: 'audit-logs', label: 'Audit Logs', icon: ShieldAlert, roles: ['superuser'] },
+  ].filter(item => {
+    if (!localUser) return true; // fallback if no RBAC enforced
+    return item.roles.includes(localUser.role);
+  });
 
   const handleSignOut = async () => {
     if (confirm('Are you sure you want to sign out from Cloud sync? Your local offline work will remain intact.')) {
@@ -238,33 +279,44 @@ export default function Sidebar({ currentRoute, setCurrentRoute, data, syncState
 
   return (
     <>
-      <div className="w-64 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800 h-screen sticky top-0 shrink-0 select-none">
+      <div className={`bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800 h-screen sticky top-0 shrink-0 select-none transition-all duration-300 ${isCollapsed ? 'w-[72px]' : 'w-64'}`}>
         {/* Brand Header */}
-        <div className="p-6 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white font-extrabold text-base flex items-center justify-center shadow-lg shadow-blue-600/20 overflow-hidden shrink-0">
-              {data.settings.logo ? (
-                <img src={data.settings.logo} alt="Logo" className="w-full h-full object-cover" />
-              ) : (
-                (data.settings.shortName || 'OT').slice(0, 2).toUpperCase()
-              )}
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+          {!isCollapsed && (
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="w-9 h-9 rounded-xl bg-blue-600 text-white font-extrabold text-base flex items-center justify-center shadow-lg shadow-blue-600/20 shrink-0 overflow-hidden">
+                {data.settings.logo ? (
+                  <img src={data.settings.logo} alt="Logo" className="w-full h-full object-cover" />
+                ) : (
+                  (data.settings.shortName || 'OT').slice(0, 2).toUpperCase()
+                )}
+              </div>
+              <div className="truncate">
+                <h1 className="font-bold text-sm tracking-tight text-white truncate">
+                  {data.settings.schoolName || 'OTEC'}
+                </h1>
+                <p className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase mt-0.5 truncate">
+                  Uganda Report Cards
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-bold text-sm tracking-tight text-white line-clamp-1">
-                {data.settings.schoolName || 'OTEC'}
-              </h1>
-              <p className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase mt-0.5">
-                Uganda Report Cards
-              </p>
-            </div>
-          </div>
+          )}
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className={`p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ${isCollapsed ? 'mx-auto' : ''}`}
+            title={isCollapsed ? 'Expand Menu' : 'Collapse Menu'}
+          >
+            {isCollapsed ? <Menu size={20} /> : <ChevronLeft size={20} />}
+          </button>
         </div>
 
         {/* Current Context */}
-        <div className="px-6 py-3 bg-slate-950/40 border-b border-slate-800/60 flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-          <span className="bg-slate-800 px-2.5 py-1 rounded-md text-[9px] text-slate-300">{data.settings.term}</span>
-          <span className="font-mono text-slate-500">{data.settings.year}</span>
-        </div>
+        {!isCollapsed && (
+          <div className="px-6 py-3 bg-slate-950/40 border-b border-slate-800/60 flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+            <span className="bg-slate-800 px-2.5 py-1 rounded-md text-[9px] text-slate-300">{data.settings.term}</span>
+            <span className="font-mono text-slate-500">{data.settings.year}</span>
+          </div>
+        )}
 
         {/* Navigation */}
         <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto custom-scrollbar">
@@ -289,12 +341,12 @@ export default function Sidebar({ currentRoute, setCurrentRoute, data, syncState
                     transition={{ type: 'spring', stiffness: 350, damping: 28 }}
                   />
                 )}
-                <span className="relative z-10 flex items-center justify-between w-full">
-                  <span className="flex items-center gap-3">
-                    <Icon size={16} className={isActive ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'} />
-                    <span>{item.label}</span>
+                <span className={`relative z-10 flex items-center w-full ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+                  <span className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
+                    <Icon size={18} className={isActive ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'} title={isCollapsed ? item.label : ''} />
+                    {!isCollapsed && <span className="truncate">{item.label}</span>}
                   </span>
-                  {item.id === 'data' && isBackupStale && (
+                  {!isCollapsed && item.id === 'data' && isBackupStale && (
                     <span 
                       className="px-1.5 py-0.5 bg-rose-600 text-white font-black text-[9px] uppercase rounded-full animate-pulse shadow-xs shadow-rose-600/50 flex items-center gap-0.5"
                       title="Cloud Snapshot sync overdue (>48 hours)"
@@ -311,109 +363,54 @@ export default function Sidebar({ currentRoute, setCurrentRoute, data, syncState
 
         {/* Cloud Sync Status Card */}
         <div className="p-4 mt-auto">
-          <div className="bg-slate-950/50 border border-slate-800/80 p-4 rounded-2xl text-xs space-y-3 shadow-inner">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">Sync Engine</span>
-              <div className="flex items-center gap-1.5">
-                <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wide ${workOffline ? 'bg-amber-500/10 text-amber-400' : isOnline ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                  {workOffline ? 'Forced Local' : isOnline ? 'Online' : 'Offline'}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-2 bg-slate-900/60 border border-slate-800/50 p-2.5 rounded-xl">
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <div className={`w-2.5 h-2.5 rounded-full ${workOffline ? 'bg-amber-500' : syncState === 'synced' ? 'bg-emerald-500' : syncState === 'syncing' ? 'bg-amber-500 animate-pulse' : 'bg-slate-500'}`} />
-                  {syncState === 'syncing' && !workOffline && (
-                    <span className="absolute -inset-0.5 rounded-full bg-amber-500/40 animate-ping" />
-                  )}
+          {user ? (
+            <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} w-full bg-slate-800 p-2 rounded-xl mb-3`}>
+              {!isCollapsed && (
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shrink-0">
+                    {user.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="truncate">
+                    <div className="text-xs font-bold text-white truncate">{user.name}</div>
+                    <div className="text-[9px] text-slate-400 uppercase tracking-widest">{user.role}</div>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <span className="font-bold text-slate-200">{statusConfig.text}</span>
-                  <span className="text-[9px] text-slate-500 font-medium">Last: {formatLastSync()}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1 shrink-0">
-                {user && (
-                  <button
-                    onClick={handleSignOut}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-500 transition-colors cursor-pointer"
-                    title="Sign Out of Cloud"
-                  >
-                    <LogOut size={12} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Explicit Work Offline Toggle */}
-            <div className="bg-slate-900/40 border border-slate-800/60 p-2.5 rounded-xl space-y-1.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <WifiOff size={13} className={workOffline ? "text-amber-400" : "text-slate-500"} />
-                  <span className="text-slate-200 font-bold text-[11px]">Work Offline</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleToggleWorkOffline(!workOffline)}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
-                    workOffline ? 'bg-amber-600' : 'bg-slate-800'
-                  }`}
-                  role="switch"
-                  aria-checked={workOffline}
-                  title={workOffline ? "Disable Work Offline mode and resume cloud sync" : "Enable Work Offline mode (force local storage)"}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition duration-200 ease-in-out ${
-                      workOffline ? 'translate-x-4' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-              <p className="text-[9.5px] text-slate-500 font-medium leading-tight">
-                {workOffline 
-                  ? "Local-only mode active. Edits will stay on this browser until synced."
-                  : "Auto cloud sync active for live multi-browser updates."}
-              </p>
-            </div>
-
-            {/* Manual Sync Now Button */}
-            <button
-              type="button"
-              onClick={handleManualSync}
-              disabled={syncState === 'syncing'}
-              className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-extrabold text-[11px] rounded-xl transition-all shadow-sm shadow-blue-600/20 flex items-center justify-center gap-2 cursor-pointer"
-              title="Force immediate synchronization with cloud storage"
-            >
-              <RefreshCw size={13} className={syncState === 'syncing' ? 'animate-spin text-white' : 'text-blue-100'} />
-              <span>{syncState === 'syncing' ? 'Synchronizing...' : 'Sync Now'}</span>
-            </button>
-
-            {!user && (
+              )}
               <button
-                type="button"
-                onClick={() => setIsAuthOpen(true)}
-                className="w-full py-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 text-[11px] font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 border border-blue-500/20 shadow-xs cursor-pointer"
+                onClick={handleSignOut}
+                className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors shrink-0"
+                title="Sign Out"
               >
-                <LogIn size={12} />
-                <span>Sign In to Cloud Sync</span>
+                <LogOut size={16} />
               </button>
-            )}
-            
-            {user && (
-              <div className="text-[9px] text-slate-500 font-mono truncate text-center bg-slate-900/30 py-1.5 rounded-lg border border-slate-900/50">
-                👤 {user.email}
-              </div>
-            )}
-          </div>
-        </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsAuthOpen(true)}
+              className={`w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold tracking-wide transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 mb-3 ${isCollapsed ? 'px-0' : ''}`}
+              title={isCollapsed ? 'Sign In' : ''}
+            >
+              <LogIn size={16} />
+              {!isCollapsed && <span>Sign In to Cloud</span>}
+            </button>
+          )}
 
+          {!isCollapsed && (
+            <div className="bg-slate-950/50 border border-slate-800/80 p-4 rounded-2xl text-xs space-y-3 shadow-inner">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">Sync Engine</span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wide ${workOffline ? 'bg-amber-500/10 text-amber-400' : isOnline ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                    {workOffline ? 'Forced Local' : isOnline ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         {/* Footer info */}
         <div className="p-4 border-t border-slate-800 text-center text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
-          {workOffline ? 'Work Offline Mode Active' : 'Offline Storage Active'}
+          {isCollapsed ? '' : (workOffline ? 'Work Offline Mode Active' : 'Offline Storage Active')}
         </div>
       </div>
 

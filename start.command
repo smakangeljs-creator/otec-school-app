@@ -7,6 +7,10 @@ if [ -f "$HOME/.nvm/nvm.sh" ]; then
   source "$HOME/.nvm/nvm.sh"
 fi
 
+# Fetch latest code from GitHub
+echo "Fetching latest updates from GitHub..."
+git pull origin main
+
 # Synchronize Dependencies
 echo "Verifying local dependencies..."
 npm install --no-audit --no-fund --prefer-offline

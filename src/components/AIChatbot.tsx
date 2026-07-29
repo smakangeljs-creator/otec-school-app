@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { MessageSquare, Sparkles, X, Send, Bot, Clock, Calendar, RefreshCw, ChevronDown, Award, HelpCircle } from 'lucide-react';
+import { motion } from 'motion/react';
+import { MessageSquare, Sparkles, Send, Bot, Calendar, Award, HelpCircle } from 'lucide-react';
 import { AppData } from '../types';
 import dataManager from '../lib/db';
 import app from '../lib/firebase';
@@ -16,7 +16,6 @@ interface Message {
 }
 
 export default function AIChatbot({ data }: AIChatbotProps) {
-  const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -146,14 +145,14 @@ export default function AIChatbot({ data }: AIChatbotProps) {
 
       if (isBullet) {
         return (
-          <li key={idx} className="ml-4 list-disc text-xs text-slate-800 leading-relaxed mb-1">
+          <li key={idx} className="ml-4 list-disc text-sm text-slate-800 leading-relaxed mb-1">
             {finalLine}
           </li>
         );
       }
 
       return (
-        <p key={idx} className="text-xs text-slate-800 leading-relaxed mb-1.5 min-h-[0.5rem]">
+        <p key={idx} className="text-sm text-slate-800 leading-relaxed mb-1.5 min-h-[1rem]">
           {finalLine}
         </p>
       );
@@ -161,156 +160,127 @@ export default function AIChatbot({ data }: AIChatbotProps) {
   };
 
   return (
-    <div id="otec-chatbot-hub" className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 30, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 30, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className="w-80 sm:w-96 h-[480px] bg-white border border-slate-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden mb-4"
-          >
-            {/* Header */}
-            <div className="bg-slate-900 text-white p-4 flex flex-col justify-between gap-1 border-b border-slate-800 relative">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-blue-600/35 text-blue-400 rounded-lg border border-blue-500/20">
-                    <Bot size={18} className="animate-pulse" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-xs text-slate-50 flex items-center gap-1">
-                      OTEC Edu-AI Assistant
-                      <Sparkles size={11} className="text-amber-400 fill-amber-400" />
-                    </h3>
-                    <p className="text-[10px] text-slate-400 font-semibold uppercase">Real-time Grounded Agent</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              {/* Time and Date Tracking Bar */}
-              <div className="flex items-center gap-2.5 mt-2 bg-slate-850/80 p-2 border border-slate-800/60 rounded-xl text-[9.5px] text-slate-300 font-semibold">
-                <div className="flex items-center gap-1 font-medium">
-                  <Calendar size={11} className="text-blue-400 shrink-0" />
-                  <span>{currentTime || 'Syncing clock...'}</span>
-                </div>
-                <div className="text-emerald-400 flex items-center gap-1 ml-auto">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                  <span>LIVE CONTEXT</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Suggestions / Prompt Starters */}
-            <div className="bg-slate-50 border-b border-slate-200/60 p-2.5">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                <Award size={12} className="text-blue-600" />
-                <span>Quick School Queries</span>
-              </div>
-              <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
-                {suggestions.map((s, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSendMessage(s)}
-                    disabled={loading}
-                    className="shrink-0 text-[10px] bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-semibold px-2.5 py-1 rounded-full cursor-pointer transition-all hover:border-slate-300 disabled:opacity-50"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Message Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
-              {messages.map((m, idx) => {
-                const isUser = m.role === 'user';
-                return (
-                  <div
-                    key={idx}
-                    className={`flex items-start gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
-                  >
-                    <div
-                      className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-white ${
-                        isUser ? 'bg-blue-600' : 'bg-slate-800'
-                      }`}
-                    >
-                      {isUser ? <HelpCircle size={12} /> : <Bot size={12} />}
-                    </div>
-                    <div
-                      className={`max-w-[82%] px-3.5 py-2.5 rounded-2xl text-xs shadow-xs ${
-                        isUser
-                          ? 'bg-blue-600 text-white rounded-tr-none'
-                          : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
-                      }`}
-                    >
-                      {isUser ? <p className="text-xs leading-relaxed">{m.content}</p> : renderMessageContent(m.content)}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {loading && (
-                <div className="flex items-start gap-2.5">
-                  <div className="w-6 h-6 rounded-lg bg-slate-800 flex items-center justify-center text-white shrink-0">
-                    <Bot size={12} />
-                  </div>
-                  <div className="bg-white border border-slate-200 text-slate-500 p-3 rounded-2xl rounded-tl-none shadow-xs flex items-center gap-2">
-                    <div className="flex space-x-1">
-                      <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                      <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                      <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                    </div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Analyzing School Database...</span>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input Footer */}
-            <div className="p-3 border-t border-slate-200 bg-white flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Ask about students, fee balances, PLE advice..."
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={loading}
-                className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-600 focus:border-transparent transition-all"
-              />
-              <button
-                onClick={() => handleSendMessage()}
-                disabled={!input.trim() || loading}
-                className="p-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-xl transition-all cursor-pointer shrink-0"
-              >
-                <Send size={14} />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Floating Action Button */}
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(!isOpen)}
-        className="h-12 px-4 bg-slate-900 hover:bg-slate-950 text-white rounded-full shadow-2xl flex items-center gap-2.5 cursor-pointer border border-slate-850"
-      >
-        <div className="relative">
-          <MessageSquare size={18} className="text-blue-400" />
-          <span className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-emerald-400 border border-slate-900 animate-pulse"></span>
+    <div className="h-full flex flex-col bg-slate-50 animate-in fade-in duration-300">
+      {/* Header */}
+      <div className="bg-slate-900 text-white p-6 flex flex-col justify-between gap-2 border-b border-slate-800 shrink-0 shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-blue-600/35 text-blue-400 rounded-xl border border-blue-500/20">
+            <Bot size={24} className="animate-pulse" />
+          </div>
+          <div>
+            <h3 className="font-bold text-lg text-slate-50 flex items-center gap-2">
+              OTEC Edu-AI Consultant
+              <Sparkles size={16} className="text-amber-400 fill-amber-400" />
+            </h3>
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-widest mt-0.5">Real-time Grounded School Intelligence</p>
+          </div>
         </div>
-        <span className="text-xs font-extrabold tracking-wide">OTEC Edu-AI</span>
-        <Sparkles size={12} className="text-amber-400 fill-amber-400" />
-      </motion.button>
+
+        {/* Time and Date Tracking Bar */}
+        <div className="flex items-center gap-3 mt-3 bg-slate-850/80 p-2.5 border border-slate-800/60 rounded-xl text-xs text-slate-300 font-semibold max-w-fit">
+          <div className="flex items-center gap-1.5 font-medium">
+            <Calendar size={14} className="text-blue-400 shrink-0" />
+            <span>{currentTime || 'Syncing clock...'}</span>
+          </div>
+          <div className="text-emerald-400 flex items-center gap-1.5 ml-4">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            <span>LIVE CONTEXT</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Suggestions / Prompt Starters */}
+      <div className="bg-white border-b border-slate-200/60 p-4 shadow-xs shrink-0">
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2.5">
+          <Award size={14} className="text-blue-600" />
+          <span>Quick School Queries</span>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
+          {suggestions.map((s, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleSendMessage(s)}
+              disabled={loading}
+              className="shrink-0 text-xs bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-blue-700 font-semibold px-4 py-2 rounded-full cursor-pointer transition-all hover:border-slate-300 disabled:opacity-50"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Message Area */}
+      <div className="flex-1 overflow-y-auto p-6 lg:p-8 space-y-6">
+        <div className="max-w-4xl mx-auto w-full space-y-6">
+          {messages.map((m, idx) => {
+            const isUser = m.role === 'user';
+            return (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                key={idx}
+                className={`flex items-start gap-4 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
+              >
+                <div
+                  className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 text-white shadow-sm ${
+                    isUser ? 'bg-blue-600' : 'bg-slate-800'
+                  }`}
+                >
+                  {isUser ? <HelpCircle size={20} /> : <Bot size={20} />}
+                </div>
+                <div
+                  className={`max-w-[85%] px-5 py-4 rounded-3xl text-sm shadow-sm ${
+                    isUser
+                      ? 'bg-blue-600 text-white rounded-tr-none'
+                      : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
+                  }`}
+                >
+                  {isUser ? <p className="text-sm leading-relaxed">{m.content}</p> : renderMessageContent(m.content)}
+                </div>
+              </motion.div>
+            );
+          })}
+
+          {loading && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-2xl bg-slate-800 flex items-center justify-center text-white shrink-0 shadow-sm">
+                <Bot size={20} />
+              </div>
+              <div className="bg-white border border-slate-200 text-slate-500 p-4 rounded-3xl rounded-tl-none shadow-sm flex items-center gap-3">
+                <div className="flex space-x-1.5">
+                  <span className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                  <span className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                  <span className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                </div>
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Analyzing School Database...</span>
+              </div>
+            </motion.div>
+          )}
+          <div ref={messagesEndRef} className="h-4" />
+        </div>
+      </div>
+
+      {/* Input Footer */}
+      <div className="p-4 lg:p-6 border-t border-slate-200 bg-white shrink-0">
+        <div className="max-w-4xl mx-auto flex items-center gap-3">
+          <input
+            type="text"
+            placeholder="Ask about students, fee balances, PLE advice, or say 'add a student'..."
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={loading}
+            className="flex-1 px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all shadow-inner"
+          />
+          <button
+            onClick={() => handleSendMessage()}
+            disabled={!input.trim() || loading}
+            className="p-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-2xl shadow-md transition-all cursor-pointer shrink-0"
+          >
+            <Send size={20} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

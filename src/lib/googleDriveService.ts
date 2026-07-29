@@ -1,88 +1,61 @@
-import { auth } from './firebase';
-import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  onAuthStateChanged, 
-  User 
-} from 'firebase/auth';
+const SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.file';
+const CLIENT_ID = '207536779687-06ss9nuukngoboudpp8m8uhopho5f2m3.apps.googleusercontent.com';
 
-// Define the scopes needed for Google Drive integration
-const SCOPES = [
-  'https://www.googleapis.com/auth/drive',
-  'https://www.googleapis.com/auth/drive.file'
-];
-
-let isSigningIn = false;
 let cachedAccessToken: string | null = localStorage.getItem('otec_gdrive_access_token');
-let cachedUser: User | null = null;
-
-// Initialize Google OAuth provider with scopes
-const getGoogleProvider = () => {
-  const provider = new GoogleAuthProvider();
-  SCOPES.forEach(scope => provider.addScope(scope));
-  // Request offline access if needed, force user prompt to get refresh token if required
-  provider.setCustomParameters({
-    prompt: 'consent'
-  });
-  return provider;
-};
+let cachedUser: any | null = null;
 
 // Initialize auth listener
 export const initGoogleAuth = (
-  onAuthSuccess?: (user: User, token: string) => void,
+  onAuthSuccess?: (user: any, token: string) => void,
   onAuthFailure?: () => void
 ) => {
-  return onAuthStateChanged(auth, async (user: User | null) => {
-    cachedUser = user;
-    if (user) {
-      // Re-read from localStorage in case it was written elsewhere
-      const savedToken = localStorage.getItem('otec_gdrive_access_token');
-      if (savedToken) {
-        cachedAccessToken = savedToken;
-      }
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        // We have a user but no access token in memory (e.g. reload). 
-        // Let the client handle showing the sign-in prompt since access tokens are short-lived.
-        cachedAccessToken = null;
-        if (onAuthFailure) onAuthFailure();
-      }
-    } else {
-      cachedAccessToken = null;
-      localStorage.removeItem('otec_gdrive_access_token');
-      if (onAuthFailure) onAuthFailure();
+  if (cachedAccessToken) {
+    if (onAuthSuccess) onAuthSuccess({ displayName: 'Google Drive User' }, cachedAccessToken);
+  } else {
+    if (onAuthFailure) onAuthFailure();
+  }
+  return () => {};
+};
+
+// Sign in with Google to obtain fresh OAuth access token
+export const googleSignIn = async (): Promise<{ user: any; accessToken: string } | null> => {
+  return new Promise((resolve, reject) => {
+    if (CLIENT_ID === 'YOUR_CLIENT_ID_HERE') {
+      return reject(new Error('Missing Google OAuth Client ID. Please edit src/lib/googleDriveService.ts and add your Client ID on line 2.'));
+    }
+    
+    try {
+      const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: (tokenResponse: any) => {
+          if (tokenResponse && tokenResponse.access_token) {
+            cachedAccessToken = tokenResponse.access_token;
+            localStorage.setItem('otec_gdrive_access_token', cachedAccessToken);
+            cachedUser = { displayName: 'Google Drive User' };
+            resolve({ user: cachedUser, accessToken: cachedAccessToken });
+          } else {
+            reject(new Error('Failed to obtain Google Drive Access Token.'));
+          }
+        },
+        error_callback: (error: any) => {
+          reject(new Error(error?.message || 'Google Auth Error'));
+        }
+      });
+      tokenClient.requestAccessToken();
+    } catch (err: any) {
+      reject(new Error('Google Identity Services library not loaded. Check internet connection.'));
     }
   });
 };
 
-// Sign in with Google to obtain fresh OAuth access token
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
-  try {
-    isSigningIn = true;
-    const provider = getGoogleProvider();
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    
-    if (!credential?.accessToken) {
-      throw new Error('Failed to obtain Google Drive Access Token from login');
-    }
-
-    cachedAccessToken = credential.accessToken;
-    localStorage.setItem('otec_gdrive_access_token', cachedAccessToken);
-    cachedUser = result.user;
-    return { user: result.user, accessToken: cachedAccessToken };
-  } catch (error: any) {
-    console.error('Google OAuth sign-in error:', error);
-    throw error;
-  } finally {
-    isSigningIn = false;
-  }
-};
-
-// Clear Google Drive Access token and sign out of Firebase
+// Clear Google Drive Access token
 export const logoutGoogle = async () => {
-  await auth.signOut();
+  if (cachedAccessToken && (window as any).google) {
+    (window as any).google.accounts.oauth2.revoke(cachedAccessToken, () => {
+       console.log('Google token revoked');
+    });
+  }
   cachedAccessToken = null;
   localStorage.removeItem('otec_gdrive_access_token');
   cachedUser = null;
@@ -92,11 +65,6 @@ export const logoutGoogle = async () => {
 export const handleAuthExpired = async () => {
   cachedAccessToken = null;
   localStorage.removeItem('otec_gdrive_access_token');
-  try {
-    await auth.signOut();
-  } catch (e) {
-    console.warn('Silent sign out on token expiry deferred:', e);
-  }
   window.dispatchEvent(new CustomEvent('otec-gdrive-token-expired'));
 };
 
@@ -104,7 +72,7 @@ export const getCachedAccessToken = (): string | null => {
   return cachedAccessToken;
 };
 
-export const getCachedUser = (): User | null => {
+export const getCachedUser = (): any | null => {
   return cachedUser;
 };
 

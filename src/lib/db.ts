@@ -2,7 +2,7 @@ import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInAnonymously } from 'firebase/auth';
 import { silentSyncToGoogleDrive, autoRestoreFromGoogleDrive } from './googleDriveService';
-import { AppData, SchoolSettings, Learner, ScoreRecord, PsychomotorRecord, CommentRecord, ActivityLog, FinanceTransaction, SecurityData, GateLogEntry, VisitorRecord, UnknownPersonAlert, SecurityGateSystemConfig } from '../types';
+import { AppData, SchoolSettings, Learner, ScoreRecord, PsychomotorRecord, CommentRecord, ActivityLog, FinanceTransaction, SecurityData, GateLogEntry, VisitorRecord, UnknownPersonAlert, SecurityGateSystemConfig, TransportData, LibraryData, InventoryData, HostelData, TimetableData, ClinicData, DisciplineData, ExtracurricularData, HRData, AdmissionsData, ProcurementData } from '../types';
 import { getDemoData, defaultSettings, defaultPrePrimaryGradingBands, defaultSectionSubjects, regenerateUNEBNumbers, getDemoSecurityData } from './defaults';
 
 export interface SyncMetric {
@@ -16,6 +16,41 @@ export interface SyncMetric {
 }
 
 const LOCAL_STORAGE_KEY = 'otec_report_card_data';
+
+// --- INDEXEDDB ABSTRACTION ---
+const DB_NAME = 'OTEC_Database';
+const STORE_NAME = 'app_data';
+
+const getDB = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
+  const request = indexedDB.open(DB_NAME, 1);
+  request.onupgradeneeded = (e) => {
+    (e.target as IDBOpenDBRequest).result.createObjectStore(STORE_NAME);
+  };
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error);
+});
+
+export const idb = {
+  async get(key: string): Promise<any> {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async set(key: string, value: any): Promise<void> {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+};
+// -----------------------------
 
 let lastSyncMetrics: SyncMetric = {
   id: 'init',
@@ -156,6 +191,7 @@ export function migrateLowerPrimarySubjects(data: AppData): AppData {
 // Singleton AppState inside module scope
 let currentData: AppData = migrateLowerPrimarySubjects(getDemoData());
 let activeUser: User | null = null;
+let localActiveUser: any = null; // SystemUserAccount
 let syncStatus: 'idle' | 'syncing' | 'synced' | 'error' | 'offline' = 'offline';
 let syncEnabled = localStorage.getItem('otec_sync_enabled') !== 'false'; // Defaults to true
 let onStateChangeCallbacks: (() => void)[] = [];
@@ -253,9 +289,21 @@ function broadcastDataChange(data: AppData) {
   }
 }
 
-// Write to local storage and broadcast to active browser sessions
+// Write to local storage (Asynchronous IndexedDB wrapper for speed)
+async function saveToLocalAsync(data: AppData) {
+  try {
+    for (const key of Object.keys(data)) {
+      await idb.set(key, (data as any)[key]);
+    }
+  } catch (e) {
+    console.error('Failed to save to IndexedDB', e);
+  }
+}
+
 function saveToLocal(data: AppData, skipBroadcast: boolean = false) {
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+  // Fire and forget IndexedDB save (non-blocking)
+  saveToLocalAsync(data).catch(console.error);
+  
   if (!skipBroadcast) {
     hasLocalDirtyState = true;
     lastLocalMutationTime = Date.now();
@@ -263,8 +311,18 @@ function saveToLocal(data: AppData, skipBroadcast: boolean = false) {
   }
 }
 
-// Initialize current data from Local Storage right away
-currentData = loadFromLocal();
+// Data is initialized via dataManager.initDB() asynchronously now
+// currentData = loadFromLocal(); // REMOVED
+
+// Restore local session if exists
+try {
+  const savedLocalSession = localStorage.getItem('otec_local_session');
+  if (savedLocalSession) {
+    localActiveUser = JSON.parse(savedLocalSession);
+  }
+} catch(e) {
+  console.warn("Failed to restore local user session", e);
+}
 
 // Set up multi-browser listeners
 if (typeof window !== 'undefined') {
@@ -517,6 +575,61 @@ const formatUGXLocal = (amount: number) => {
 };
 
 export const dataManager = {
+  // Initialize Database from IndexedDB (or fallback to old localStorage)
+  async initDB(): Promise<AppData> {
+    const keys = [
+      'learners', 'scores', 'psychomotor', 'comments', 'settings', 'activityLog', 'auditLogs',
+      'finances', 'security', 'transport', 'library', 'inventory', 'hostel',
+      'timetable', 'clinic', 'discipline', 'extracurricular', 'hr', 'admissions',
+      'procurement', 'communications'
+    ];
+    
+    let data: Partial<AppData> = {};
+    let isNew = true;
+    
+    try {
+      for (const key of keys) {
+        const val = await idb.get(key);
+        if (val !== undefined) {
+          (data as any)[key] = val;
+          isNew = false;
+        }
+      }
+    } catch (e) {
+      console.warn('IndexedDB read failed, falling back', e);
+    }
+
+    if (isNew) {
+      // Migrate from localStorage if exists
+      console.log('Migrating from localStorage to IndexedDB...');
+      data = loadFromLocal();
+      await saveToLocalAsync(data as AppData);
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+    }
+
+    // Ensure all top-level keys exist by merging with a fresh demo object
+    const demoFallback = getDemoData();
+    const safeData = { ...demoFallback, ...data } as AppData;
+
+    // Specifically deep-merge settings because it contains critical nested config like authConfig and sections
+    if (data.settings) {
+      safeData.settings = { ...demoFallback.settings, ...data.settings };
+      // Deep merge sections specifically
+      if (data.settings.sections) {
+        safeData.settings.sections = { ...demoFallback.settings.sections, ...data.settings.sections };
+      } else {
+        safeData.settings.sections = demoFallback.settings.sections;
+      }
+      // Ensure examSets exists
+      if (!data.settings.examSets) {
+        safeData.settings.examSets = demoFallback.settings.examSets;
+      }
+    }
+
+    currentData = migrateLowerPrimarySubjects(safeData);
+    return currentData;
+  },
+
   // Get current state
   getData(): AppData {
     return currentData;
@@ -651,11 +764,111 @@ export const dataManager = {
     this.syncWithCloud();
   },
 
-  // Clear everything
+  updateTransportData(transport: TransportData) {
+    currentData.transport = transport;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateLibraryData(library: LibraryData) {
+    currentData.library = library;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateInventoryData(inventory: InventoryData) {
+    currentData.inventory = inventory;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateHostelData(hostel: HostelData) {
+    currentData.hostel = hostel;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateTimetableData(timetable: TimetableData) {
+    currentData.timetable = timetable;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateClinicData(clinic: ClinicData) {
+    currentData.clinic = clinic;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateDisciplineData(discipline: DisciplineData) {
+    currentData.discipline = discipline;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateExtracurricularData(extracurricular: ExtracurricularData) {
+    currentData.extracurricular = extracurricular;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateAdmissionsData(admissions: AdmissionsData) {
+    currentData.admissions = admissions;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateProcurementData(procurement: ProcurementData) {
+    currentData.procurement = procurement;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  updateCommunicationsData(communications: CommunicationsData) {
+    currentData.communications = communications;
+    saveToLocal(currentData);
+    this.triggerUpdate();
+    this.syncWithCloud();
+  },
+
+  // Clear everything and load demo
   resetToDefaults() {
     currentData = getDemoData();
     saveToLocal(currentData);
     this.addActivityLog('reset_defaults', 'Database cleared and reset to system demo defaults.');
+  },
+
+  // Wipe EVERYTHING to start fresh with real data
+  wipeAllData() {
+    currentData = {
+      learners: [],
+      scores: {},
+      psychomotor: {},
+      comments: {},
+      settings: currentData.settings, // Keep settings like grading bands
+      finances: [],
+      security: { gateLogs: [], visitors: [] },
+      transport: { routes: [], allocations: [] },
+      library: { books: [], issues: [] },
+      inventory: { assets: [] },
+      hostel: { dormitories: [], allocations: [] },
+      timetable: { slots: [] },
+      clinic: { records: {}, visits: [] },
+      discipline: { incidents: [] },
+      extracurricular: { clubs: [], memberships: [] }
+    };
+    saveToLocal(currentData);
+    this.addActivityLog('wipe_data', 'Database wiped clean for fresh real data entry.');
   },
 
   // State changes subscription
@@ -681,6 +894,20 @@ export const dataManager = {
 
   getActiveUser() {
     return activeUser;
+  },
+
+  getLocalActiveUser() {
+    return localActiveUser;
+  },
+
+  setLocalActiveUser(user: any) {
+    localActiveUser = user;
+    if (user) {
+      localStorage.setItem('otec_local_session', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('otec_local_session');
+    }
+    this.triggerUpdate();
   },
 
   isSyncEnabled() {
@@ -914,6 +1141,32 @@ export const dataManager = {
 
       window.dispatchEvent(new CustomEvent('otec-sync-metric', { detail: errorMetric }));
     }
+  },
+
+  logAuditAction(
+    moduleName: 'Finance' | 'Academics' | 'HR' | 'Security' | 'System' | 'Hostel' | 'Transport' | 'Library' | 'Inventory' | 'Admissions' | 'Communications' | 'Procurement',
+    action: 'CREATE' | 'UPDATE' | 'DELETE',
+    recordId: string,
+    details: string,
+    previousValue?: any,
+    newValue?: any
+  ) {
+    if (!currentData.auditLogs) currentData.auditLogs = [];
+    const newLog = {
+      id: Math.random().toString(36).substring(2, 9),
+      timestamp: new Date().toISOString(),
+      userId: activeUser?.uid || 'system',
+      userName: activeUser?.displayName || activeUser?.email || 'System User',
+      module: moduleName,
+      action,
+      recordId,
+      details,
+      previousValue,
+      newValue
+    };
+    currentData.auditLogs = [newLog, ...currentData.auditLogs].slice(0, 1000); // Keep last 1000 entries
+    saveToLocal(currentData, true);
+    this.triggerUpdate();
   },
 
   // Initialize Auth Listening

@@ -170,7 +170,7 @@ export function defaultSystemUsers(): SystemUserAccount[] {
       username: 'admin',
       name: 'Ssemakula Joseph (Super Admin)',
       role: 'superuser',
-      pinOrPassword: '1234',
+      pinOrPassword: 'admin123',
       active: true,
       createdAt: new Date().toISOString()
     },
@@ -225,12 +225,16 @@ export function defaultSettings(): SchoolSettings {
     },
     examSets: defaultExamSets(),
     classTeachers: {
-      'P7': { name: 'Mr. Ssemwogerere David', initials: 'S.D.' },
-      'P6': { name: 'Miss Atwine Phiona', initials: 'A.P.' },
-      'P1': { name: 'Mrs. Nakayiza Proscovia', initials: 'N.P.' },
-      'ZEBRA': { name: 'Mrs. Babirye Harriet', initials: 'B.H.' },
-      'LION': { name: 'Mr. Mugisha Charles', initials: 'M.C.' },
-      'ELEPHANT': { name: 'Miss Nalubega Brenda', initials: 'N.B.' }
+      'P7': { name: 'Onyango Geofrey', initials: 'O.G.' },
+      'P6': { name: 'Okello Joseph', initials: 'O.J.' },
+      'P5': { name: 'Abago Santa', initials: 'A.S.' },
+      'P4': { name: 'Tr Justine Babirye', initials: 'J.B.' },
+      'P3': { name: 'Nanozi Winnie', initials: 'N.W.' },
+      'P2': { name: 'Nambirige Norah', initials: 'N.N.' },
+      'P1': { name: 'Joy Kimera', initials: 'J.K.' },
+      'ZEBRA': { name: 'Katulinde Lillian', initials: 'K.L.' },
+      'LION': { name: 'Nakimera Justine', initials: 'N.J.' },
+      'ELEPHANT': { name: 'Namazzi Brenda', initials: 'N.B.' }
     },
     pleOverride: {
       enabled: true,
@@ -241,12 +245,19 @@ export function defaultSettings(): SchoolSettings {
       requireAllCoreSubjects: true
     },
     teachersList: [
-      { id: 'T1', name: 'Mr. Ssemwogerere David', initials: 'S.D.', phone: '+256 772 111111', email: 'david.s@school.ug', specialization: 'Mathematics & Science' },
-      { id: 'T2', name: 'Miss Atwine Phiona', initials: 'A.P.', phone: '+256 701 222222', email: 'phiona.a@school.ug', specialization: 'English & Social Studies' },
-      { id: 'T3', name: 'Mrs. Nakayiza Proscovia', initials: 'N.P.', phone: '+256 752 333333', email: 'proscovia.n@school.ug', specialization: 'Literacy & Religious Education' },
-      { id: 'T4', name: 'Mrs. Babirye Harriet', initials: 'B.H.', phone: '+256 782 444444', email: 'harriet.b@school.ug', specialization: 'Pre-Primary Development' },
-      { id: 'T5', name: 'Mr. Mugisha Charles', initials: 'M.C.', phone: '+256 703 555555', email: 'charles.m@school.ug', specialization: 'Physical Education & Games' },
-      { id: 'T6', name: 'Miss Nalubega Brenda', initials: 'N.B.', phone: '+256 754 666666', email: 'brenda.n@school.ug', specialization: 'Creative Arts & Music' }
+      { id: 'T1', name: 'Okello Joseph', initials: 'O.J.', phone: '+256 700 000001', email: 'okello@school.ug', specialization: 'English' },
+      { id: 'T2', name: 'Tr Justine Babirye', initials: 'J.B.', phone: '+256 700 000002', email: 'justine@school.ug', specialization: 'English' },
+      { id: 'T3', name: 'Onyango Geofrey', initials: 'O.G.', phone: '+256 700 000003', email: 'onyango@school.ug', specialization: 'Mathematics' },
+      { id: 'T4', name: 'Abago Santa', initials: 'A.S.', phone: '+256 700 000004', email: 'abago@school.ug', specialization: 'Social Studies' },
+      { id: 'T5', name: 'Mweru Gonzaga', initials: 'M.G.', phone: '+256 700 000005', email: 'mweru@school.ug', specialization: 'Science' },
+      { id: 'T6', name: 'Joy Kimera', initials: 'J.K.', phone: '+256 700 000006', email: 'joy@school.ug', specialization: 'Lower Primary' },
+      { id: 'T7', name: 'Nimrod Nsanya', initials: 'N.N.', phone: '+256 700 000007', email: 'nimrod@school.ug', specialization: 'Class Helper' },
+      { id: 'T8', name: 'Nambirige Norah', initials: 'N.No.', phone: '+256 700 000008', email: 'nambirige@school.ug', specialization: 'Literacy 1' },
+      { id: 'T9', name: 'Nanozi Winnie', initials: 'N.W.', phone: '+256 700 000009', email: 'nanozi@school.ug', specialization: 'Luganda' },
+      { id: 'T10', name: 'Namazzi Brenda', initials: 'N.B.', phone: '+256 700 000010', email: 'namazzi@school.ug', specialization: 'Nursery' },
+      { id: 'T11', name: 'Katulinde Lillian', initials: 'K.L.', phone: '+256 700 000011', email: 'katulinde@school.ug', specialization: 'Nursery' },
+      { id: 'T12', name: 'Nakimera Justine', initials: 'N.J.', phone: '+256 700 000012', email: 'nakimera@school.ug', specialization: 'Nursery' },
+      { id: 'T13', name: 'Nabatanzi Annet', initials: 'N.A.', phone: '+256 700 000013', email: 'nabatanzi@school.ug', specialization: 'Nursery' }
     ],
     reportCardVisibility: {
       showTeacherComments: true,
@@ -512,8 +523,222 @@ export function getDemoData(): AppData {
     comments,
     settings: defaultSettings(),
     finances,
-    security: getDemoSecurityData()
+    security: getDemoSecurityData(),
+    transport: {
+      routes: [{ id: 'route-1', name: 'Kampala Express', driver: 'Musa', capacity: 30, costPerTerm: 250000 }],
+      allocations: [{ id: 'alloc-1', learnerId: learners[0]?.id || '', routeId: 'route-1', stopName: 'Ntinda', direction: 'Both', amountPaid: 250000, term: 'Term 3 2026' }]
+    },
+    library: {
+      books: [{ id: 'bk-1', title: 'Primary Science Bk 7', author: 'MK Publishers', isbn: '978-X', category: 'Science', totalCopies: 20, availableCopies: 19 }],
+      issues: [{ id: 'iss-1', bookId: 'bk-1', issuedToType: 'Learner', issuedToId: learners[0]?.id || '', issueDate: new Date().toISOString(), dueDate: new Date(Date.now() + 86400000 * 7).toISOString(), status: 'Issued' }]
+    },
+    inventory: {
+      assets: [{ id: 'ast-1', name: 'Dell Latitude 3420', category: 'Electronics', condition: 'Good', status: 'Assigned', assignedTo: 'T1', purchaseDate: '2025-01-10', value: 2500000, notes: 'Teacher Laptop' }]
+    },
+    hostel: {
+      dormitories: [{ id: 'dorm-1', name: 'Mandela House', gender: 'Boys', capacity: 50, patronId: 'T1', rooms: [{ id: 'rm-1', name: 'Room 1', capacity: 10 }] }],
+      allocations: [{ id: 'ha-1', learnerId: learners[0]?.id || '', dormitoryId: 'dorm-1', roomId: 'rm-1', bedNumber: '1', term: 'Term 3' }]
+    },
+    timetable: {
+      slots: generateDemoTimetable()
+    },
+    clinic: {
+      records: { [learners[0]?.id || '']: { learnerId: learners[0]?.id || '', allergies: 'Peanuts', chronicConditions: 'Asthma', emergencyContact: '0772000000' } },
+      visits: [{ id: 'cv-1', learnerId: learners[0]?.id || '', date: new Date().toISOString(), symptoms: 'Headache', diagnosis: 'Migraine', treatment: 'Paracetamol', nurseName: 'Nurse Jane' }]
+    },
+    discipline: {
+      incidents: [{ id: 'inc-1', learnerId: learners[0]?.id || '', date: new Date().toISOString(), type: 'Merit', points: 5, description: 'Outstanding performance in debate', actionTaken: 'Praise', reportedBy: 'T2' }]
+    },
+    extracurricular: {
+      clubs: [{ id: 'cl-1', name: 'Debate Club', description: 'School debating society', patronId: 'T2', meetingDay: 'Friday', meetingTime: '16:00' }],
+      memberships: [{ id: 'mem-1', clubId: 'cl-1', learnerId: learners[0]?.id || '', role: 'President', joinedDate: new Date().toISOString() }]
+    },
+    admissions: {
+      applicants: []
+    },
+    procurement: {
+      requests: []
+    },
+    communications: {
+      messages: [
+        {
+          id: 'msg-1',
+          type: 'SMS',
+          recipientId: 'ALL_PARENTS',
+          recipientName: 'All Parents',
+          recipientContact: 'Multiple',
+          body: 'Dear Parents, Term 3 officially begins on 7th Sept 2026. Please ensure all outstanding fee balances are cleared. OTEC Mgt.',
+          sentAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+          status: 'Delivered',
+          sentBy: 'Ssemakula Joseph'
+        },
+        {
+          id: 'msg-2',
+          type: 'SMS',
+          recipientId: 'seeded_5', // Prossy
+          recipientName: 'Nagita Prossy Parent',
+          recipientContact: '+256701000000',
+          body: 'Dear Parent, Nagita Prossy has an outstanding balance of UGX 150,000. Please clear before Mid-Term exams.',
+          sentAt: new Date(Date.now() - 86400000 * 1).toISOString(),
+          status: 'Delivered',
+          sentBy: 'Ssemakula Joseph'
+        }
+      ]
+    }
   };
+}
+
+export function generateDemoTimetable() {
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const slots: any[] = [];
+  let idCounter = 1;
+
+  const createSlot = (cls: string, day: string, start: string, end: string, subject: string, teacherId: string) => {
+    slots.push({
+      id: `ts-${idCounter++}`,
+      classId: cls,
+      dayOfWeek: day,
+      startTime: start,
+      endTime: end,
+      subjectId: subject,
+      teacherId,
+      roomId: `Room ${cls}`
+    });
+  };
+
+  // Nursery (ZEBRA, LION, ELEPHANT)
+  // Teachers: T10 (Elephant), T11 (Zebra), T12 (Lion), T13 (Nabatanzi Annet - one subject)
+  const nurseryClasses = [
+    { id: 'ELEPHANT', teacher: 'T10' },
+    { id: 'ZEBRA', teacher: 'T11' },
+    { id: 'LION', teacher: 'T12' }
+  ];
+  const nurserySubjects = ['NUMBERS', 'ENGLISH', 'HEALTH HABBITS', 'SOCIAL DEVELOPMENTS', 'READING', 'WRITING', 'DRAWING'];
+  
+  for (const nc of nurseryClasses) {
+    for (const day of days) {
+      if (day === 'Saturday') continue; // Nursery doesn't do Saturday in this strict schedule usually, but if they do, we can just let it be. Let's do Monday-Friday.
+      
+      // Morning Circle
+      createSlot(nc.id, day, '08:00', '08:30', 'Morning Circle', nc.teacher);
+      
+      // 3 Lessons per day (30 mins each)
+      // Main teacher teaches 2, Nabatanzi (T13) teaches 1.
+      createSlot(nc.id, day, '08:30', '09:00', nurserySubjects[0], nc.teacher);
+      createSlot(nc.id, day, '09:00', '09:30', nurserySubjects[1], 'T13');
+      
+      // 09:30 - 10:30 Breakfast / Free time (Not a lesson slot)
+      createSlot(nc.id, day, '10:30', '11:00', nurserySubjects[2], nc.teacher);
+      
+      // End of day is 12:30 (Lunch at 12:30, depart at 13:30)
+    }
+  }
+
+  // Lower Primary (P1, P2, P3)
+  // Joy (T6) P1, Nimrod (T7) Helper, Nambirige (T8) Literacy P1-P3, Nanozi (T9) Luganda P1-P3
+  const lowerClasses = ['P1', 'P2', 'P3'];
+  const lowerSubjects = ['English', 'Mathematics', 'Literacy 1', 'Literacy 2', 'Religious Education', 'Luganda'];
+  const lowerTimeSlots = [
+    { start: '06:30', end: '07:30' },
+    { start: '07:30', end: '08:30' },
+    { start: '08:30', end: '09:30' },
+    { start: '09:30', end: '10:30' },
+    // 10:30 - 11:00 Breakfast Break
+    { start: '11:00', end: '12:00' },
+    { start: '12:00', end: '13:00' },
+    // 13:00 - 14:00 Lunch Break
+    { start: '14:00', end: '15:00' },
+    { start: '15:00', end: '16:00' },
+    { start: '16:00', end: '17:00' }
+  ];
+
+  const getLowerTeacher = (cls: string, subject: string) => {
+    if (subject === 'Literacy 1' || subject === 'Literacy 2') return 'T8'; // Nambirige Norah
+    if (subject === 'Luganda') return 'T9'; // Nanozi Winnie
+    if (cls === 'P1') return 'T6'; // Joy Kimera
+    return `T${Math.floor(Math.random() * 2) + 6}`; // Random default fallback
+  };
+
+  for (const cls of lowerClasses) {
+    for (const day of days) {
+      if (day === 'Saturday') continue;
+      lowerTimeSlots.forEach(ts => {
+        const sub = lowerSubjects[Math.floor(Math.random() * lowerSubjects.length)];
+        createSlot(cls, day, ts.start, ts.end, sub, getLowerTeacher(cls, sub));
+      });
+    }
+  }
+
+  // Upper Primary (P4, P5, P6, P7)
+  // T1: Okello Joseph (English P5-P7)
+  // T2: Justine Babirye (English P3-P4)
+  // T3: Onyango Geofrey (Math P5-P7)
+  // T4: Abago Santa (SST P5-P7)
+  // T5: Mweru Gonzaga (Science P5-P7)
+  const upperClasses = ['P4', 'P5', 'P6', 'P7'];
+  const upperSubjects = ['English', 'Mathematics', 'Science', 'Social Studies', 'Religious Education', 'ICT / Integrated Studies'];
+  const upperTimeBlocks = [
+    { start: '06:00', end: '07:20' }, // 80 mins
+    { start: '07:20', end: '08:40' },
+    { start: '08:40', end: '10:00' },
+    // 10:00 - 10:30 (Free period/Break 1)
+    { start: '10:30', end: '11:00' }, // Breakfast Break (Wait, this is an actual break, we shouldn't schedule lessons here)
+    // Actually the user said Breakfast is 10:30 to 11:00.
+    // Let's schedule lessons around it.
+    // 10:00 - 10:30 -> Not breakfast, so maybe a 30 min single period?
+    // Let's just adjust the slots to fit nicely:
+    { start: '06:30', end: '07:50' }, // if we shift? User said 6:00 AM start.
+    { start: '11:00', end: '12:20' }, // 80 mins
+    { start: '12:20', end: '13:00' }, // 40 min single
+    // 13:00 - 14:00 Lunch
+    { start: '14:00', end: '15:20' }, // 80 mins
+    { start: '15:20', end: '16:40' }, // 80 mins
+    // 16:40 - 17:00 (End of day)
+    // Extra lessons
+    { start: '19:00', end: '20:20' }, // 80 mins
+    { start: '20:20', end: '21:00' }  // 40 mins
+  ];
+
+  // Let's rewrite upperTimeBlocks so that they are strictly lesson periods (not breaks)
+  const actualUpperBlocks = [
+    { start: '06:00', end: '07:20' },
+    { start: '07:20', end: '08:40' },
+    { start: '08:40', end: '10:00' },
+    { start: '10:00', end: '10:30' }, // 30 mins
+    // 10:30 - 11:00 Breakfast
+    { start: '11:00', end: '12:20' }, 
+    { start: '12:20', end: '13:00' }, // 40 mins
+    // 13:00 - 14:00 Lunch
+    { start: '14:00', end: '15:20' },
+    { start: '15:20', end: '16:40' },
+    // Extra lessons
+    { start: '19:00', end: '20:20' },
+    { start: '20:20', end: '21:00' }
+  ];
+
+  const getUpperTeacher = (cls: string, subject: string) => {
+    if (cls === 'P5' || cls === 'P6' || cls === 'P7') {
+      if (subject === 'English') return 'T1';
+      if (subject === 'Mathematics') return 'T3';
+      if (subject === 'Social Studies') return 'T4';
+      if (subject === 'Science') return 'T5';
+    } else if (cls === 'P4') {
+      if (subject === 'English') return 'T2';
+    }
+    // Fallback
+    return `T${Math.floor(Math.random() * 5) + 1}`; 
+  };
+
+  for (const cls of upperClasses) {
+    for (const day of days) {
+      actualUpperBlocks.forEach(ts => {
+        const sub = upperSubjects[Math.floor(Math.random() * upperSubjects.length)];
+        createSlot(cls, day, ts.start, ts.end, sub, getUpperTeacher(cls, sub));
+      });
+    }
+  }
+
+  return slots;
 }
 
 export function getDemoSecurityData(): SecurityData {

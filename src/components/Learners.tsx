@@ -5,6 +5,7 @@ import dataManager from '../lib/db';
 import { Search, UserPlus, Trash2, Edit2, Filter, AlertCircle, RefreshCw, ChevronDown, ChevronUp, Camera, Video, X, Check, Printer, IdCard, Users, FileSpreadsheet, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
+import GlobalFilterBar from './ui/GlobalFilterBar';
 
 interface LearnersProps {
   data: AppData;
@@ -1391,55 +1392,23 @@ export default function Learners({ data, onUpdateLearners }: LearnersProps) {
           </div>
 
           {/* Directory Filters */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-4 border border-slate-100 rounded-xl">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by name or Adm No..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-blue-600 focus:border-transparent transition-all"
-              />
-            </div>
-
-            <div>
-              <select
-                value={selectedClass}
-                onChange={e => setSelectedClass(e.target.value)}
-                className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-blue-600 focus:border-transparent transition-all"
-              >
-                <option value="All">All Classes</option>
-                {ALL_CLASSES.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <select
-                value={selectedSex}
-                onChange={e => setSelectedSex(e.target.value)}
-                className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-blue-600 focus:border-transparent transition-all"
-              >
-                <option value="All">All Genders</option>
-                <option value="Male">Boys</option>
-                <option value="Female">Girls</option>
-              </select>
-            </div>
-
-            <div>
-              <select
-                value={selectedBoarding}
-                onChange={e => setSelectedBoarding(e.target.value)}
-                className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-blue-600 focus:border-transparent transition-all"
-              >
-                <option value="All">All Status (Day & Boarder)</option>
-                <option value="Boarding">Boarders Only</option>
-                <option value="Day">Day Scholars Only</option>
-              </select>
-            </div>
-          </div>
+          <GlobalFilterBar
+            searchQuery={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Search by name, ID, or Paycode..."
+            selectedClass={selectedClass}
+            onClassChange={setSelectedClass}
+            selectedSex={selectedSex}
+            onSexChange={setSelectedSex}
+            showStatusFilter={true}
+            selectedStatus={selectedBoarding}
+            onStatusChange={setSelectedBoarding}
+            statusOptions={[
+              { label: 'All Status (Day & Boarder)', value: 'All' },
+              { label: 'Boarders Only', value: 'Boarding' },
+              { label: 'Day Scholars Only', value: 'Day' }
+            ]}
+          />
 
           {/* Directory Table */}
           <div className="overflow-x-auto">

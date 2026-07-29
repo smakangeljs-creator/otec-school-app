@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AppData, SchoolSettings, ExamSet, ClassTeacher, GradingBand, Subject, PLEOverrideConfig, Teacher } from '../types';
+import { AppData, SchoolSettings, ExamSet, ClassTeacher, GradingBand, Subject, PLEOverrideConfig, Teacher, NonTeachingStaff } from '../types';
 import { ALL_CLASSES, TERMS, PERIODS, defaultGradingBands, getGradeRank } from '../lib/defaults';
 import { 
   Building, 
@@ -14,12 +14,19 @@ import {
   ShieldAlert,
   Search,
   Edit2,
+  Edit3,
+  X,
   UserPlus,
   Award,
   User,
   BookOpen,
   Image,
-  Coins
+  Coins,
+  Package,
+  Monitor,
+  Smartphone,
+  Loader2,
+  Database
 } from 'lucide-react';
 
 interface SettingsProps {
@@ -28,7 +35,22 @@ interface SettingsProps {
 }
 
 export default function Settings({ data, onUpdateSettings }: SettingsProps) {
-  const [activeTab, setActiveTab] = useState<'school' | 'ple' | 'visibility' | 'preprimary' | 'lower' | 'upper' | 'examsets' | 'teachers' | 'psycho' | 'calendar' | 'finance'>('school');
+  const [activeTab, setActiveTab] = useState<'school' | 'ple' | 'visibility' | 'preprimary' | 'lower' | 'upper' | 'examsets' | 'teachers' | 'psycho' | 'calendar' | 'finance' | 'packager' | 'access' | 'moduleConfigs' | 'helpers'>('school');
+
+  // Shared Module Configurations State
+  const [newFCName, setNewFCName] = useState('');
+  const [newFCType, setNewFCType] = useState<'income' | 'expense'>('income');
+  const [newFCColor, setNewFCColor] = useState('blue');
+  const [newHRDept, setNewHRDept] = useState('');
+  const [newRouteName, setNewRouteName] = useState('');
+  const [newRouteCost, setNewRouteCost] = useState('');
+  const [newBlockName, setNewBlockName] = useState('');
+  const [newBlockCap, setNewBlockCap] = useState('');
+  const [newLibCat, setNewLibCat] = useState('');
+  const [newOffenseName, setNewOffenseName] = useState('');
+  const [newOffenseType, setNewOffenseType] = useState<'Merit' | 'Demerit'>('Demerit');
+  const [newAssetLoc, setNewAssetLoc] = useState('');
+  const [newClinicMed, setNewClinicMed] = useState('');
 
   // Financial Ledger Settings states
   const [ledgerDayFees, setLedgerDayFees] = useState(data.settings.ledgerDayFees ?? 500000);
@@ -123,6 +145,68 @@ export default function Settings({ data, onUpdateSettings }: SettingsProps) {
   const [editTSpecialization, setEditTSpecialization] = useState('');
 
   const [teacherSearch, setTeacherSearch] = useState('');
+
+  // Non-Teaching Staff Registry states
+  const [newNtsName, setNewNtsName] = useState('');
+  const [newNtsDepartment, setNewNtsDepartment] = useState('');
+  const [newNtsPhone, setNewNtsPhone] = useState('');
+  
+  const [editingNtsId, setEditingNtsId] = useState<string | null>(null);
+  const [editNtsName, setEditNtsName] = useState('');
+  const [editNtsDepartment, setEditNtsDepartment] = useState('');
+  const [editNtsPhone, setEditNtsPhone] = useState('');
+  const [ntsSearch, setNtsSearch] = useState('');  // Auth User states
+  const [showUserForm, setShowUserForm] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [authName, setAuthName] = useState('');
+  const [authUsername, setAuthUsername] = useState('');
+  const [authRole, setAuthRole] = useState<'superuser' | 'accountant' | 'security' | 'teacher'>('teacher');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authActive, setAuthActive] = useState(true);
+
+  // Packager states
+  const [isBuildingApp, setIsBuildingApp] = useState<'mac' | 'win' | 'android' | null>(null);
+
+  const handleBuildApp = (platform: 'mac' | 'win' | 'android') => {
+    const isElectron = window && (window as any).process && (window as any).process.type;
+    if (!isElectron) {
+      alert('Generating applications is only supported within the Desktop App.');
+      return;
+    }
+
+    if (platform === 'android') {
+      if (!confirm('Generating an Android APK requires Android Studio and Gradle to be installed on your Mac. Proceed?')) return;
+    } else if (platform === 'win') {
+      if (!confirm('Generating a Windows .exe from a Mac requires Homebrew and Wine installed. Proceed?')) return;
+    }
+
+    setIsBuildingApp(platform);
+    
+    try {
+      const { exec } = (window as any).require('child_process');
+      const cwd = (window as any).process.cwd();
+      
+      let cmd = '';
+      if (platform === 'mac') cmd = 'npm run desktop:build:mac';
+      if (platform === 'win') cmd = 'npm run desktop:build:win';
+      if (platform === 'android') cmd = 'npm run mobile:build:android';
+
+      exec(cmd, { cwd }, (error: any, stdout: any, stderr: any) => {
+        setIsBuildingApp(null);
+        if (error) {
+          console.error('Build Error:', error, stderr);
+          alert(`Build failed for ${platform}. Check console for details. Ensure you have the required build tools installed.`);
+        } else {
+          console.log('Build Output:', stdout);
+          alert(`Success! The ${platform} package has been generated in the /release (or /android) directory.`);
+        }
+      });
+    } catch (e) {
+      setIsBuildingApp(null);
+      console.error(e);
+      alert('An error occurred attempting to start the build process.');
+    }
+  };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -560,6 +644,58 @@ export default function Settings({ data, onUpdateSettings }: SettingsProps) {
     onUpdateSettings(updated);
   };
 
+  // Non-Teaching Staff Registry methods
+  const handleAddNts = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNtsName.trim() || !newNtsDepartment.trim()) {
+      alert('Please provide Name and Department.');
+      return;
+    }
+    const newNts: NonTeachingStaff = {
+      id: 'NTS' + Date.now().toString(36),
+      name: newNtsName.trim(),
+      department: newNtsDepartment.trim(),
+      phone: newNtsPhone.trim() || undefined
+    };
+    const updated: SchoolSettings = {
+      ...data.settings,
+      nonTeachingStaffList: [...(data.settings.nonTeachingStaffList || []), newNts]
+    };
+    onUpdateSettings(updated);
+    setNewNtsName('');
+    setNewNtsDepartment('');
+    setNewNtsPhone('');
+    alert('Non-Teaching Staff registered!');
+  };
+
+  const handleStartEditNts = (staff: NonTeachingStaff) => {
+    setEditingNtsId(staff.id);
+    setEditNtsName(staff.name);
+    setEditNtsDepartment(staff.department);
+    setEditNtsPhone(staff.phone || '');
+  };
+
+  const handleSaveEditNts = (id: string) => {
+    if (!editNtsName.trim() || !editNtsDepartment.trim()) return;
+    const current = data.settings.nonTeachingStaffList || [];
+    const updated: SchoolSettings = {
+      ...data.settings,
+      nonTeachingStaffList: current.map(s => s.id === id ? { ...s, name: editNtsName.trim(), department: editNtsDepartment.trim(), phone: editNtsPhone.trim() || undefined } : s)
+    };
+    onUpdateSettings(updated);
+    setEditingNtsId(null);
+  };
+
+  const handleDeleteNts = (id: string) => {
+    if (!confirm('Are you sure you want to remove this staff member?')) return;
+    const current = data.settings.nonTeachingStaffList || [];
+    const updated: SchoolSettings = {
+      ...data.settings,
+      nonTeachingStaffList: current.filter(s => s.id !== id)
+    };
+    onUpdateSettings(updated);
+  };
+
   // Psychomotor skills methods
   const handleAddSkill = () => {
     if (!newSkill.trim() || data.settings.psychomotor.includes(newSkill.trim())) return;
@@ -605,13 +741,79 @@ export default function Settings({ data, onUpdateSettings }: SettingsProps) {
   };
 
   const handleRemoveCalendarEvent = (id: string) => {
-    if (!confirm('Are you sure you want to remove this calendar event?')) return;
-    const updatedEvents = (data.settings.calendarEvents || []).filter(e => e.id !== id);
-    const updated: SchoolSettings = {
+    const updatedEvents = (data.settings.calendarEvents || []).filter(ev => ev.id !== id);
+    onUpdateSettings({ ...data.settings, calendarEvents: updatedEvents });
+  };
+
+  const handleSaveAuthUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authName.trim() || !authUsername.trim()) return;
+
+    let users = data.settings.authConfig?.users || [];
+    
+    if (editingUserId) {
+      users = users.map(u => u.id === editingUserId ? {
+        ...u,
+        name: authName.trim(),
+        username: authUsername.trim(),
+        role: authRole,
+        active: authActive,
+        ...(authPassword.trim() ? { pinOrPassword: authPassword.trim() } : {})
+      } : u);
+    } else {
+      if (!authPassword.trim()) {
+        alert("Password is required for new users.");
+        return;
+      }
+      users = [...users, {
+        id: `user-${Date.now()}`,
+        name: authName.trim(),
+        username: authUsername.trim(),
+        role: authRole,
+        pinOrPassword: authPassword.trim(),
+        active: authActive,
+        createdAt: new Date().toISOString()
+      }];
+    }
+
+    onUpdateSettings({
       ...data.settings,
-      calendarEvents: updatedEvents
-    };
-    onUpdateSettings(updated);
+      authConfig: {
+        requireLoginOnStartup: data.settings.authConfig?.requireLoginOnStartup ?? true,
+        users
+      }
+    });
+
+    setShowUserForm(false);
+    setEditingUserId(null);
+    setAuthName('');
+    setAuthUsername('');
+    setAuthPassword('');
+    setAuthRole('teacher');
+    setAuthActive(true);
+  };
+
+  const handleEditAuthUser = (user: any) => {
+    setEditingUserId(user.id);
+    setAuthName(user.name);
+    setAuthUsername(user.username);
+    setAuthRole(user.role);
+    setAuthActive(user.active);
+    setAuthPassword(''); // Don't show existing password
+    setShowUserForm(true);
+  };
+
+  const handleDeleteAuthUser = (id: string) => {
+    if (confirm("Are you sure you want to completely remove this user account?")) {
+      const users = (data.settings.authConfig?.users || []).filter(u => u.id !== id);
+      onUpdateSettings({
+        ...data.settings,
+        authConfig: {
+          requireLoginOnStartup: data.settings.authConfig?.requireLoginOnStartup ?? true,
+          users
+        }
+      });
+    }
   };
 
   return (
@@ -641,7 +843,11 @@ export default function Settings({ data, onUpdateSettings }: SettingsProps) {
           { id: 'examsets', label: 'Exam Papers', icon: SlidersIcon },
           { id: 'teachers', label: 'Class Teachers', icon: GraduationCap },
           { id: 'psycho', label: 'Psychomotor Criteria', icon: Heart },
-          { id: 'calendar', label: 'School Calendar', icon: Calendar }
+          { id: 'calendar', label: 'School Calendar', icon: Calendar },
+          { id: 'packager', label: 'App Packager', icon: Package },
+          { id: 'access', label: 'Access Control', icon: User },
+          { id: 'moduleConfigs', label: 'Module Resources', icon: Database },
+          { id: 'helpers', label: 'System Helpers', icon: BookOpen }
         ].map((tab) => {
           const Icon = tab.icon;
           return (
@@ -1963,8 +2169,179 @@ export default function Settings({ data, onUpdateSettings }: SettingsProps) {
                 </div>
               </div>
             </div>
+            {/* Part 2: Non-Teaching Staff Registry */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6 mt-8">
+              <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center pb-4 border-b border-slate-100">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-950">Non-Teaching Staff Directory</h3>
+                  <p className="text-xs text-slate-500 mt-1">Register and manage support staff, guards, cleaners, and administrators.</p>
+                </div>
+                <div className="relative w-full sm:w-64">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search support staff..."
+                    value={ntsSearch}
+                    onChange={e => setNtsSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
 
-            {/* Part 2: Class Stream Assignments */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                <form onSubmit={handleAddNts} className="bg-slate-50 border border-slate-200/60 p-5 rounded-2xl space-y-4">
+                  <div className="flex items-center gap-1.5 pb-2 border-b border-slate-200/50">
+                    <UserPlus size={16} className="text-blue-600" />
+                    <h4 className="text-xs font-bold text-slate-800 uppercase">Register Support Staff</h4>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Kato Moses"
+                      value={newNtsName}
+                      onChange={e => setNewNtsName(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs placeholder:text-slate-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Department *</label>
+                    <select
+                      required
+                      value={newNtsDepartment}
+                      onChange={e => setNewNtsDepartment(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs"
+                    >
+                      <option value="">Select Department...</option>
+                      {(data.settings.hrDepartments || []).map(dept => (
+                        <option key={dept} value={dept}>{dept}</option>
+                      ))}
+                    </select>
+                    {(!data.settings.hrDepartments || data.settings.hrDepartments.length === 0) && (
+                      <p className="text-[10px] text-rose-500 mt-1">Please add departments in Module Resources first.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">Contact Phone</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 077..."
+                      value={newNtsPhone}
+                      onChange={e => setNewNtsPhone(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs placeholder:text-slate-400"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full mt-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    <Plus size={14} />
+                    <span>Add Staff Member</span>
+                  </button>
+                </form>
+
+                <div className="lg:col-span-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-400 bg-slate-50/50">
+                        <th className="py-2.5 px-4 font-semibold">Staff Info</th>
+                        <th className="py-2.5 px-4 font-semibold">Department</th>
+                        <th className="py-2.5 px-4 text-right font-semibold w-24">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(data.settings.nonTeachingStaffList || []).filter(s => 
+                        s.name.toLowerCase().includes(ntsSearch.toLowerCase()) ||
+                        s.department.toLowerCase().includes(ntsSearch.toLowerCase())
+                      ).map(s => {
+                        const isEditing = editingNtsId === s.id;
+                        return (
+                          <tr key={s.id} className="hover:bg-slate-50/20">
+                            {isEditing ? (
+                              <>
+                                <td className="py-2 px-3" colSpan={2}>
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200">
+                                    <div>
+                                      <span className="text-[9px] font-bold text-slate-400 uppercase">Name</span>
+                                      <input
+                                        type="text"
+                                        value={editNtsName}
+                                        onChange={e => setEditNtsName(e.target.value)}
+                                        className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-semibold"
+                                      />
+                                    </div>
+                                    <div>
+                                      <span className="text-[9px] font-bold text-slate-400 uppercase">Department</span>
+                                      <select
+                                        value={editNtsDepartment}
+                                        onChange={e => setEditNtsDepartment(e.target.value)}
+                                        className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs"
+                                      >
+                                        <option value="">Select Department...</option>
+                                        {(data.settings.hrDepartments || []).map(dept => (
+                                          <option key={`edit-${dept}`} value={dept}>{dept}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <span className="text-[9px] font-bold text-slate-400 uppercase">Phone</span>
+                                      <input
+                                        type="text"
+                                        value={editNtsPhone}
+                                        onChange={e => setEditNtsPhone(e.target.value)}
+                                        className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs"
+                                      />
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-2 px-4 text-right align-top">
+                                  <div className="flex items-center justify-end gap-2 pt-1">
+                                    <button onClick={() => handleSaveEditNts(s.id)} className="p-1.5 bg-emerald-50 text-emerald-600 rounded-md hover:bg-emerald-100"><Check size={14} /></button>
+                                    <button onClick={() => setEditingNtsId(null)} className="p-1.5 bg-slate-100 text-slate-500 rounded-md hover:bg-slate-200"><X size={14} /></button>
+                                  </div>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="py-2 px-4">
+                                  <div className="font-bold text-slate-800">{s.name}</div>
+                                  {s.phone && <div className="text-[10px] text-slate-400 font-mono mt-0.5">{s.phone}</div>}
+                                </td>
+                                <td className="py-2 px-4">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                                    {s.department}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-4 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button onClick={() => handleStartEditNts(s)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"><Edit3 size={14} /></button>
+                                    <button onClick={() => handleDeleteNts(s.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"><Trash2 size={14} /></button>
+                                  </div>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        );
+                      })}
+                      {(!data.settings.nonTeachingStaffList || data.settings.nonTeachingStaffList.length === 0) && (
+                        <tr>
+                          <td colSpan={3} className="py-8 text-center text-slate-400 bg-slate-50/50 italic">
+                            No non-teaching staff currently registered.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Part 3: Class Stream Assignments */}
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
               <h3 className="text-sm font-bold text-slate-950 pb-2 border-b border-slate-100">Class Stream Assignments</h3>
               <p className="text-xs text-slate-500">Assign a registered teacher or configure custom class stream teachers to manage report card signing.</p>
@@ -2564,6 +2941,475 @@ export default function Settings({ data, onUpdateSettings }: SettingsProps) {
               </button>
             </div>
           </form>
+        )}
+
+        {/* TAB: Packager */}
+        {activeTab === 'packager' && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6">
+            <h3 className="text-sm font-bold text-slate-950 pb-2 border-b border-slate-100 flex items-center gap-2">
+              <Package size={16} className="text-indigo-600" />
+              Generate Standalone Installers
+            </h3>
+            
+            <p className="text-xs text-slate-500 font-medium">
+              Click the buttons below to compile and generate downloadable installers for different platforms. Note that generating Windows or Android files from a Mac requires specific developer tools (Wine, Android Studio) to be installed on your machine.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              <button
+                type="button"
+                onClick={() => handleBuildApp('mac')}
+                disabled={isBuildingApp !== null}
+                className="flex flex-col items-center justify-center gap-3 p-5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-white hover:shadow-md hover:border-slate-300 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Monitor size={32} className="text-slate-700" />
+                <div className="text-center">
+                  <div className="font-bold text-slate-800 text-sm">macOS (.dmg)</div>
+                  <div className="text-[10px] text-slate-500 font-medium">Apple Silicon & Intel</div>
+                </div>
+                {isBuildingApp === 'mac' && <Loader2 size={16} className="animate-spin text-slate-400 mt-2" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleBuildApp('win')}
+                disabled={isBuildingApp !== null}
+                className="flex flex-col items-center justify-center gap-3 p-5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-white hover:shadow-md hover:border-slate-300 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Monitor size={32} className="text-blue-600" />
+                <div className="text-center">
+                  <div className="font-bold text-slate-800 text-sm">Windows (.exe)</div>
+                  <div className="text-[10px] text-slate-500 font-medium">Windows 10 / 11</div>
+                </div>
+                {isBuildingApp === 'win' && <Loader2 size={16} className="animate-spin text-blue-400 mt-2" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleBuildApp('android')}
+                disabled={isBuildingApp !== null}
+                className="flex flex-col items-center justify-center gap-3 p-5 bg-emerald-50 border border-emerald-200 rounded-xl hover:bg-emerald-100/50 hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Smartphone size={32} className="text-emerald-600" />
+                <div className="text-center">
+                  <div className="font-bold text-slate-800 text-sm">Android (.apk)</div>
+                  <div className="text-[10px] text-emerald-600/80 font-medium">Mobile Installer</div>
+                </div>
+                {isBuildingApp === 'android' && <Loader2 size={16} className="animate-spin text-emerald-500 mt-2" />}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: Access Control */}
+        {activeTab === 'access' && (
+          <div className="space-y-6">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                    <User size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-sm">User Access Control</h3>
+                    <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Manage system logins and Role Based Access Control (RBAC).</p>
+                  </div>
+                </div>
+                {!showUserForm && (
+                  <button 
+                    onClick={() => {
+                      setEditingUserId(null);
+                      setAuthName('');
+                      setAuthUsername('');
+                      setAuthPassword('');
+                      setAuthRole('teacher');
+                      setAuthActive(true);
+                      setShowUserForm(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                  >
+                    <UserPlus size={14} /> Add User
+                  </button>
+                )}
+              </div>
+
+              {showUserForm ? (
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4 animate-in fade-in slide-in-from-top-2">
+                  <h4 className="text-xs font-black text-slate-800 mb-3 uppercase tracking-wider">{editingUserId ? 'Edit User Account' : 'Register New User'}</h4>
+                  <form onSubmit={handleSaveAuthUser} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Full Name</label>
+                        <input type="text" required value={authName} onChange={e => setAuthName(e.target.value)} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="e.g. Jane Doe" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Username</label>
+                        <input type="text" required value={authUsername} onChange={e => setAuthUsername(e.target.value)} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono" placeholder="e.g. janedoe1" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">System Role</label>
+                        <select value={authRole} onChange={e => setAuthRole(e.target.value as any)} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                          <option value="superuser">Superuser (Full Admin)</option>
+                          <option value="accountant">Accountant (Bursar)</option>
+                          <option value="security">Security Guard (Gate)</option>
+                          <option value="teacher">Teacher (Academics)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                          Password {editingUserId && <span className="text-slate-400 font-normal lowercase">(leave blank to keep current)</span>}
+                        </label>
+                        <input type="password" required={!editingUserId} value={authPassword} onChange={e => setAuthPassword(e.target.value)} className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" id="authActive" checked={authActive} onChange={e => setAuthActive(e.target.checked)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                      <label htmlFor="authActive" className="text-xs font-semibold text-slate-700 cursor-pointer">Account is Active (Can Login)</label>
+                    </div>
+                    <div className="flex items-center gap-2 pt-2">
+                      <button type="submit" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer">
+                        Save User
+                      </button>
+                      <button type="button" onClick={() => setShowUserForm(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer">
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              ) : (
+                <div className="overflow-hidden border border-slate-200 rounded-xl">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500">
+                        <th className="px-4 py-3 border-b border-slate-200">Name</th>
+                        <th className="px-4 py-3 border-b border-slate-200">Username</th>
+                        <th className="px-4 py-3 border-b border-slate-200">Role</th>
+                        <th className="px-4 py-3 border-b border-slate-200">Status</th>
+                        <th className="px-4 py-3 border-b border-slate-200 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                      {data.settings.authConfig?.users.map(u => (
+                        <tr key={u.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-semibold">{u.name}</td>
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-[11px] bg-slate-100 text-slate-600 px-2 py-1 rounded inline-block">{u.username}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              u.role === 'superuser' ? 'bg-purple-100 text-purple-700' :
+                              u.role === 'accountant' ? 'bg-emerald-100 text-emerald-700' :
+                              u.role === 'security' ? 'bg-amber-100 text-amber-700' :
+                              'bg-blue-100 text-blue-700'
+                            }`}>
+                              {u.role}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${u.active ? 'bg-green-100 text-green-700' : 'bg-rose-100 text-rose-700'}`}>
+                              {u.active ? 'Active' : 'Disabled'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right space-x-2">
+                            <button onClick={() => handleEditAuthUser(u)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer" title="Edit User">
+                              <Edit2 size={14} />
+                            </button>
+                            <button onClick={() => handleDeleteAuthUser(u.id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer" title="Delete User">
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {(!data.settings.authConfig?.users || data.settings.authConfig.users.length === 0) && (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-slate-500 text-sm">
+                            No users registered. Add a superuser to secure the system.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'moduleConfigs' && (
+          <div className="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-8 animate-in slide-in-from-bottom-2">
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">Shared Module Resources</h3>
+              <p className="text-xs text-slate-500 mt-1">Configure global dropdowns and parameters used across the various app modules.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Finance Categories */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
+                  <Coins size={16} className="text-blue-600" />
+                  <h4 className="font-bold text-slate-800 text-sm">Finance Categories</h4>
+                </div>
+                
+                <div className="flex gap-2 mb-4">
+                  <input type="text" placeholder="Category Name" value={newFCName} onChange={e => setNewFCName(e.target.value)} className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-200" />
+                  <select value={newFCType} onChange={e => setNewFCType(e.target.value as any)} className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white">
+                    <option value="income">Income</option>
+                    <option value="expense">Expense</option>
+                  </select>
+                  <button onClick={() => {
+                    if(!newFCName) return;
+                    const cats = data.settings.financeCategories || [];
+                    onUpdateSettings({...data.settings, financeCategories: [...cats, { id: 'fc-'+Date.now(), name: newFCName, type: newFCType, color: 'blue' }]});
+                    setNewFCName('');
+                  }} className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-lg text-xs">Add</button>
+                </div>
+                
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                  {(data.settings.financeCategories || []).map(cat => (
+                    <div key={cat.id} className="flex items-center justify-between bg-white p-2 border border-slate-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${cat.type === 'income' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                        <span className="text-xs font-medium text-slate-700">{cat.name}</span>
+                      </div>
+                      <button onClick={() => {
+                        const cats = data.settings.financeCategories!.filter(c => c.id !== cat.id);
+                        onUpdateSettings({...data.settings, financeCategories: cats});
+                      }} className="text-rose-500 hover:text-rose-700"><Trash2 size={14}/></button>
+                    </div>
+                  ))}
+                  {(!data.settings.financeCategories || data.settings.financeCategories.length === 0) && <p className="text-xs text-slate-500 italic">No categories defined.</p>}
+                </div>
+              </div>
+
+              {/* HR Departments */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
+                  <User size={16} className="text-blue-600" />
+                  <h4 className="font-bold text-slate-800 text-sm">HR Departments</h4>
+                </div>
+                
+                <div className="flex gap-2 mb-4">
+                  <input type="text" placeholder="Department Name" value={newHRDept} onChange={e => setNewHRDept(e.target.value)} className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-200" />
+                  <button onClick={() => {
+                    if(!newHRDept) return;
+                    const depts = data.settings.hrDepartments || [];
+                    if(!depts.includes(newHRDept)) {
+                      onUpdateSettings({...data.settings, hrDepartments: [...depts, newHRDept]});
+                    }
+                    setNewHRDept('');
+                  }} className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-lg text-xs">Add</button>
+                </div>
+                
+                <div className="flex flex-wrap gap-2">
+                  {(data.settings.hrDepartments || []).map(dept => (
+                    <div key={dept} className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-md">
+                      <span className="text-xs font-medium text-slate-700">{dept}</span>
+                      <button onClick={() => {
+                        const depts = data.settings.hrDepartments!.filter(d => d !== dept);
+                        onUpdateSettings({...data.settings, hrDepartments: depts});
+                      }} className="text-rose-400 hover:text-rose-600 ml-1"><X size={12}/></button>
+                    </div>
+                  ))}
+                  {(!data.settings.hrDepartments || data.settings.hrDepartments.length === 0) && <p className="text-xs text-slate-500 italic">No departments defined.</p>}
+                </div>
+              </div>
+
+              {/* Transport Routes */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
+                  <Building size={16} className="text-blue-600" />
+                  <h4 className="font-bold text-slate-800 text-sm">Transport Routes</h4>
+                </div>
+                
+                <div className="flex gap-2 mb-4">
+                  <input type="text" placeholder="Route Name" value={newRouteName} onChange={e => setNewRouteName(e.target.value)} className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-200" />
+                  <input type="number" placeholder="Cost" value={newRouteCost} onChange={e => setNewRouteCost(e.target.value)} className="w-20 px-3 py-1.5 text-xs rounded-lg border border-slate-200" />
+                  <button onClick={() => {
+                    if(!newRouteName) return;
+                    const routes = data.settings.transportRoutes || [];
+                    onUpdateSettings({...data.settings, transportRoutes: [...routes, { id: 'rt-'+Date.now(), name: newRouteName, standardCost: Number(newRouteCost) || 0 }]});
+                    setNewRouteName('');
+                    setNewRouteCost('');
+                  }} className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-lg text-xs">Add</button>
+                </div>
+                
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                  {(data.settings.transportRoutes || []).map(route => (
+                    <div key={route.id} className="flex items-center justify-between bg-white p-2 border border-slate-200 rounded-lg">
+                      <span className="text-xs font-medium text-slate-700">{route.name} (UGX {route.standardCost?.toLocaleString()})</span>
+                      <button onClick={() => {
+                        const routes = data.settings.transportRoutes!.filter(r => r.id !== route.id);
+                        onUpdateSettings({...data.settings, transportRoutes: routes});
+                      }} className="text-rose-500 hover:text-rose-700"><Trash2 size={14}/></button>
+                    </div>
+                  ))}
+                  {(!data.settings.transportRoutes || data.settings.transportRoutes.length === 0) && <p className="text-xs text-slate-500 italic">No routes defined.</p>}
+                </div>
+              </div>
+
+              {/* Asset Locations */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
+                  <Package size={16} className="text-blue-600" />
+                  <h4 className="font-bold text-slate-800 text-sm">Asset Locations</h4>
+                </div>
+                
+                <div className="flex gap-2 mb-4">
+                  <input type="text" placeholder="Location Name" value={newAssetLoc} onChange={e => setNewAssetLoc(e.target.value)} className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-200" />
+                  <button onClick={() => {
+                    if(!newAssetLoc) return;
+                    const locs = data.settings.assetLocations || [];
+                    if(!locs.includes(newAssetLoc)) {
+                      onUpdateSettings({...data.settings, assetLocations: [...locs, newAssetLoc]});
+                    }
+                    setNewAssetLoc('');
+                  }} className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-lg text-xs">Add</button>
+                </div>
+                
+                <div className="flex flex-wrap gap-2">
+                  {(data.settings.assetLocations || []).map(loc => (
+                    <div key={loc} className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-md">
+                      <span className="text-xs font-medium text-slate-700">{loc}</span>
+                      <button onClick={() => {
+                        const locs = data.settings.assetLocations!.filter(l => l !== loc);
+                        onUpdateSettings({...data.settings, assetLocations: locs});
+                      }} className="text-rose-400 hover:text-rose-600 ml-1"><X size={12}/></button>
+                    </div>
+                  ))}
+                  {(!data.settings.assetLocations || data.settings.assetLocations.length === 0) && <p className="text-xs text-slate-500 italic">No locations defined.</p>}
+                </div>
+              </div>
+              
+              {/* Hostel Blocks */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
+                  <Building size={16} className="text-blue-600" />
+                  <h4 className="font-bold text-slate-800 text-sm">Hostel Dormitories</h4>
+                </div>
+                
+                <div className="flex gap-2 mb-4">
+                  <input type="text" placeholder="Block Name" value={newBlockName} onChange={e => setNewBlockName(e.target.value)} className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-200" />
+                  <input type="number" placeholder="Capacity" value={newBlockCap} onChange={e => setNewBlockCap(e.target.value)} className="w-20 px-3 py-1.5 text-xs rounded-lg border border-slate-200" />
+                  <button onClick={() => {
+                    if(!newBlockName) return;
+                    const blocks = data.settings.hostelBlocks || [];
+                    onUpdateSettings({...data.settings, hostelBlocks: [...blocks, { id: 'blk-'+Date.now(), name: newBlockName, capacity: Number(newBlockCap) || 0 }]});
+                    setNewBlockName('');
+                    setNewBlockCap('');
+                  }} className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-lg text-xs">Add</button>
+                </div>
+                
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                  {(data.settings.hostelBlocks || []).map(block => (
+                    <div key={block.id} className="flex items-center justify-between bg-white p-2 border border-slate-200 rounded-lg">
+                      <span className="text-xs font-medium text-slate-700">{block.name} ({block.capacity} beds)</span>
+                      <button onClick={() => {
+                        const blocks = data.settings.hostelBlocks!.filter(b => b.id !== block.id);
+                        onUpdateSettings({...data.settings, hostelBlocks: blocks});
+                      }} className="text-rose-500 hover:text-rose-700"><Trash2 size={14}/></button>
+                    </div>
+                  ))}
+                  {(!data.settings.hostelBlocks || data.settings.hostelBlocks.length === 0) && <p className="text-xs text-slate-500 italic">No blocks defined.</p>}
+                </div>
+              </div>
+
+              {/* Discipline Offenses */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
+                  <ShieldAlert size={16} className="text-blue-600" />
+                  <h4 className="font-bold text-slate-800 text-sm">Discipline Offenses</h4>
+                </div>
+                
+                <div className="flex gap-2 mb-4">
+                  <input type="text" placeholder="Offense Name" value={newOffenseName} onChange={e => setNewOffenseName(e.target.value)} className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-200" />
+                  <select value={newOffenseType} onChange={e => setNewOffenseType(e.target.value as any)} className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white">
+                    <option value="Demerit">Demerit</option>
+                    <option value="Merit">Merit</option>
+                  </select>
+                  <button onClick={() => {
+                    if(!newOffenseName) return;
+                    const offenses = data.settings.disciplineOffenses || [];
+                    onUpdateSettings({...data.settings, disciplineOffenses: [...offenses, { id: 'off-'+Date.now(), name: newOffenseName, type: newOffenseType }]});
+                    setNewOffenseName('');
+                  }} className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-lg text-xs">Add</button>
+                </div>
+                
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                  {(data.settings.disciplineOffenses || []).map(offense => (
+                    <div key={offense.id} className="flex items-center justify-between bg-white p-2 border border-slate-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${offense.type === 'Merit' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{offense.type}</span>
+                        <span className="text-xs font-medium text-slate-700">{offense.name}</span>
+                      </div>
+                      <button onClick={() => {
+                        const offenses = data.settings.disciplineOffenses!.filter(o => o.id !== offense.id);
+                        onUpdateSettings({...data.settings, disciplineOffenses: offenses});
+                      }} className="text-rose-500 hover:text-rose-700"><Trash2 size={14}/></button>
+                    </div>
+                  ))}
+                  {(!data.settings.disciplineOffenses || data.settings.disciplineOffenses.length === 0) && <p className="text-xs text-slate-500 italic">No offenses defined.</p>}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'helpers' && (
+          <div className="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-8 animate-in slide-in-from-bottom-2">
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">System Helpers & Guides</h3>
+              <p className="text-xs text-slate-500 mt-1">Configure user onboarding and system-wide hotkeys.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Keyboard Shortcuts */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                  <div className="p-1.5 bg-blue-100 text-blue-700 rounded-lg">
+                    <Monitor size={16} />
+                  </div>
+                  <h4 className="font-bold text-slate-800 text-sm">Keyboard Shortcuts</h4>
+                </div>
+                <p className="text-xs text-slate-500">View all available hotkeys to navigate the application faster.</p>
+                
+                <div className="flex justify-start">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('otec-show-shortcuts'));
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs shadow-sm"
+                  >
+                    View Shortcuts List
+                  </button>
+                </div>
+              </div>
+
+              {/* Onboarding Wizard */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                  <div className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg">
+                    <BookOpen size={16} />
+                  </div>
+                  <h4 className="font-bold text-slate-800 text-sm">System Onboarding</h4>
+                </div>
+                <p className="text-xs text-slate-500">Trigger the onboarding wizard to guide new users through the platform features.</p>
+                
+                <div className="flex justify-start">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('otec-start-onboarding'));
+                    }}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-sm"
+                  >
+                    Start Onboarding Guide
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -39,7 +39,8 @@ import {
   EyeOff,
   HardDrive,
   Shield,
-  AlertTriangle
+  AlertTriangle,
+  Github
 } from 'lucide-react';
 import { 
   googleSignIn, 
@@ -99,6 +100,82 @@ export default function BackupManager({ data, backgroundOnly = false }: BackupMa
   const [passphraseInput, setPassphraseInput] = useState('');
   const [showPassphraseText, setShowPassphraseText] = useState(false);
   const [decryptError, setDecryptError] = useState<string | null>(null);
+  
+  const [githubSyncing, setGithubSyncing] = useState(false);
+
+  const handleGitHubSync = (isAuto: any = false) => {
+    const auto = isAuto === true;
+    if (!auto && window.confirm("Are you sure you want to back up and sync the entire application code and database to GitHub?") === false) {
+      return;
+    }
+    setGithubSyncing(true);
+    const isElectron = window && (window as any).process && (window as any).process.type;
+    if (isElectron) {
+      try {
+        const { exec } = (window as any).require('child_process');
+        const path = (window as any).require('path');
+        const fs = (window as any).require('fs');
+        const cwd = (window as any).process.cwd();
+        
+        try {
+          const currentDataStr = JSON.stringify(dataManager.getData(), null, 2);
+          fs.writeFileSync(path.join(cwd, 'database_backup.json'), currentDataStr);
+        } catch (fsErr) {
+          console.error('Failed to write database_backup.json:', fsErr);
+        }
+        
+        const isWin = navigator.userAgent.toLowerCase().includes('win');
+        const scriptName = isWin ? 'sync-github.bat' : './sync-github.command';
+        
+        exec(scriptName, { cwd }, (error: any, stdout: any, stderr: any) => {
+          setGithubSyncing(false);
+          if (error) {
+            console.error('GitHub Sync Error:', error);
+            if (!auto) triggerToast('Failed to sync with GitHub. See console for details.', 'error');
+          } else {
+            console.log('GitHub Sync Output:', stdout);
+            if (!auto) {
+              setRestoredToast('Source code and database successfully backed up to GitHub!');
+              triggerToast('Database and source code successfully backed up to GitHub!', 'success');
+            } else {
+              triggerToast('Automated Database Backup to GitHub completed!', 'info');
+            }
+            dataManager.addActivityLog('settings_modified', auto ? 'Automated periodic GitHub database backup completed.' : 'Synced source code and database to GitHub.');
+          }
+        });
+      } catch (e) {
+        setGithubSyncing(false);
+        console.error('Child process error:', e);
+        if (!auto) triggerToast('Unable to execute sync script. Ensure you are running the Desktop app.', 'error');
+      }
+    } else {
+      setGithubSyncing(false);
+      if (!auto) triggerToast('GitHub Sync is only available in the Desktop Application.', 'warning');
+    }
+  };
+
+  useEffect(() => {
+    const checkGitHubAutoSync = () => {
+      try {
+        const lastSync = localStorage.getItem('otec_last_github_auto_sync');
+        const now = Date.now();
+        // 4 hours = 14400000 ms
+        if (!lastSync || now - parseInt(lastSync, 10) > 14400000) {
+          console.log('Triggering automated GitHub data sync...');
+          localStorage.setItem('otec_last_github_auto_sync', now.toString());
+          handleGitHubSync(true);
+        }
+      } catch (e) {
+        console.error('GitHub Auto Sync error:', e);
+      }
+    };
+    const timeout = setTimeout(checkGitHubAutoSync, 15000);
+    const interval = setInterval(checkGitHubAutoSync, 3600000); 
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, []);
 
   const triggerToast = (message: string, type: 'success' | 'info' | 'warning' | 'error' = 'success') => {
     window.dispatchEvent(new CustomEvent('otec-toast', { detail: { message, type } }));
@@ -265,8 +342,8 @@ export default function BackupManager({ data, backgroundOnly = false }: BackupMa
       }
     } catch (err: any) {
       console.error('Google Sign-in failed:', err);
-      setGError('Google connection failed. Please ensure popups are enabled.');
-      triggerToast('Google connection failed. Please check popups.', 'error');
+      setGError('Google connection failed: ' + (err.message || 'Unknown error'));
+      triggerToast('Google connection failed: ' + (err.message || 'Unknown error'), 'error');
     } finally {
       setGLoading(false);
     }
@@ -1552,6 +1629,49 @@ export default function BackupManager({ data, backgroundOnly = false }: BackupMa
             </button>
           </div>
         )}
+      </div>
+
+      {/* GitHub Code Backup Panel */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-slate-800 text-white border border-slate-700 rounded-xl">
+              <Github size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-slate-950">GitHub Source Code Backup</h3>
+              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
+                Automatically sync and backup the entire app source code to GitHub
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleGitHubSync}
+              disabled={githubSyncing}
+              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-slate-900/15 flex items-center gap-2 cursor-pointer"
+            >
+              {githubSyncing ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Github size={13} />
+              )}
+              <span>Sync Code to GitHub</span>
+            </button>
+          </div>
+        </div>
+        <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-3.5">
+          <div className="flex justify-between items-center text-xs font-bold text-slate-500">
+            <span>Version Control Integration</span>
+            <span className="text-slate-700 font-black uppercase tracking-wider bg-slate-200 border border-slate-300 px-1.5 py-0.5 rounded text-[8.5px]">
+              sync-github.command
+            </span>
+          </div>
+          <p className="text-slate-500 text-[11px] leading-relaxed font-semibold">
+            This will trigger the local Git sync script to stage, commit, and securely push any new code updates directly to your GitHub repository. (Note: Only available in the Desktop App).
+          </p>
+        </div>
       </div>
 
       {/* Drive Sync Detailed Records Summary Modal */}

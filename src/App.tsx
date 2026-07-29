@@ -14,15 +14,37 @@ import AIChatbot from './components/AIChatbot';
 import NotificationCenter from './components/NotificationCenter';
 import FinanceManager from './components/FinanceManager';
 import SecurityManager from './components/SecurityManager';
+import TransportManager from './components/TransportManager';
+import LibraryManager from './components/LibraryManager';
+import InventoryManager from './components/InventoryManager';
+import HostelManager from './components/HostelManager';
+import TimetableManager from './components/TimetableManager';
+import ClinicManager from './components/ClinicManager';
+import DisciplineManager from './components/DisciplineManager';
+import ExtracurricularManager from './components/ExtracurricularManager';
+import TeacherAttendance from './components/TeacherAttendance';
+import Student360 from './components/Student360';
+import Staff360 from './components/Staff360';
+import HRManager from './components/HRManager';
+import AdmissionsManager from './components/AdmissionsManager';
+import ProcurementManager from './components/ProcurementManager';
+import CommunicationsEngine from './components/CommunicationsEngine';
+import ParentPortal from './components/ParentPortal';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
+
 import OnboardingTour from './components/OnboardingTour';
 import SyncConflictModal from './components/SyncConflictModal';
+import AuthModal from './components/AuthModal';
+import AuditLogViewer from './components/AuditLogViewer';
 import { motion, AnimatePresence } from 'motion/react';
 import { Keyboard, X, Sparkles, HelpCircle, Save, Printer, ArrowRight, Menu } from 'lucide-react';
 
 export default function App() {
-  const [data, setData] = useState<AppData>(dataManager.getData());
+  const [isDbReady, setIsDbReady] = useState(false);
+  const [data, setData] = useState<AppData | null>(null);
   const [syncState, setSyncState] = useState(dataManager.getSyncStatus());
   const [activeUser, setActiveUser] = useState(dataManager.getActiveUser());
+  const [localUser, setLocalUser] = useState(dataManager.getLocalActiveUser());
   const [currentRoute, setCurrentRoute] = useState('dashboard');
   const [showSidebar, setShowSidebar] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -30,12 +52,100 @@ export default function App() {
   const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: 'success' | 'info' | 'warning' | 'error' }>>([]);
 
   useEffect(() => {
-    const onboardingCompleted = localStorage.getItem('otec_onboarding_completed');
-    if (onboardingCompleted !== 'true') {
-      setShowOnboardingTour(true);
-    }
-    // Perform synchronization once when the page opens
-    dataManager.syncWithCloud(true, 'page_open');
+    // Initialize IndexedDB
+    dataManager.initDB().then((initialData) => {
+      // Auto-import external data just once
+      if (!localStorage.getItem('otec_db_imported_v5')) {
+        console.log('Injecting extracted data from extracted_updates.json...');
+        
+        // Fetch the updates payload
+        fetch('/extracted_updates.json')
+          .then(res => res.json())
+          .then(updates => {
+            const mergedData = { ...initialData };
+            
+            // Merge finances (filter out old System Imports to prevent duplicates)
+            const oldFinances = (mergedData.finances || []).filter(f => f.recordedBy !== 'System Import');
+            const newFinances = (updates.finances || []).map((f: any) => {
+               // Try to find the student ID for fees
+               if (f.studentNameMatch && mergedData.learners) {
+                 const student = mergedData.learners.find(l => 
+                   l.name.toLowerCase() === f.studentNameMatch.toLowerCase() || 
+                   l.name.toLowerCase().includes(f.studentNameMatch.split(' ').pop()?.toLowerCase() || '')
+                 );
+                 if (student) f.studentId = student.id;
+                 delete f.studentNameMatch;
+               }
+               return f;
+            });
+            mergedData.finances = [...oldFinances, ...newFinances];
+            
+            // Merge staff
+            if (!mergedData.settings) mergedData.settings = {} as any;
+            const oldTeachers = (mergedData.settings.teachers || []).filter(t => !t.id.startsWith('tchr-'));
+            const newTeachers = (updates.teachers || []);
+            mergedData.settings.teachers = [...oldTeachers, ...newTeachers];
+            
+            const oldNTS = (mergedData.settings.nonTeachingStaff || []).filter(t => !t.id.startsWith('ntsf-'));
+            const newNTS = (updates.nonTeachingStaff || []);
+            mergedData.settings.nonTeachingStaff = [...oldNTS, ...newNTS];
+            
+            // Update or Add learners based on updates
+            if (updates.learnerUpdates && mergedData.learners) {
+              const newLearners: any[] = [];
+              updates.learnerUpdates.forEach((u: any) => {
+                let found = false;
+                mergedData.learners = mergedData.learners.map(l => {
+                  const matchFull = l.name.toLowerCase() === u.fullName.toLowerCase();
+                  const matchLast = u.lastName && u.lastName.trim() !== '' ? l.name.toLowerCase().includes(u.lastName.toLowerCase()) : false;
+                  const matchFirst = u.firstName && u.firstName.trim() !== '' ? l.name.toLowerCase().includes(u.firstName.toLowerCase()) : false;
+                  const isMatch = matchFull || (matchFirst && matchLast);
+                  
+                  if (isMatch) {
+                    found = true;
+                    if (u.outstandingBalance) {
+                      return { ...l, outstandingBalance: u.outstandingBalance };
+                    }
+                  }
+                  return l;
+                });
+                
+                if (!found) {
+                  // Add missing learner
+                  newLearners.push({
+                    id: 'L-' + Math.random().toString(36).substr(2, 9),
+                    name: u.fullName,
+                    admNo: 'ADM-' + Math.floor(1000 + Math.random() * 9000),
+                    sex: 'Male', // Default, would need manual update
+                    age: '12',
+                    cls: 'P.4', // Default class
+                    outstandingBalance: u.outstandingBalance || '0'
+                  });
+                }
+              });
+              
+              mergedData.learners = [...mergedData.learners, ...newLearners];
+            }
+            
+            dataManager.setData(mergedData);
+            setData(mergedData);
+            localStorage.setItem('otec_db_imported_v6', 'true');
+            addToast('External Excel data has been successfully merged into the system!', 'success');
+          })
+          .catch(err => console.error("Failed to load updates:", err));
+      } else {
+        setData(initialData);
+      }
+      
+      setIsDbReady(true);
+      
+      const onboardingCompleted = localStorage.getItem('otec_onboarding_completed');
+      if (onboardingCompleted !== 'true') {
+        setShowOnboardingTour(true);
+      }
+      // Perform synchronization once when the page opens
+      dataManager.syncWithCloud(true, 'page_open');
+    });
   }, []);
 
   const currentRouteRef = React.useRef(currentRoute);
@@ -57,6 +167,7 @@ export default function App() {
       setData({ ...dataManager.getData() });
       setSyncState(dataManager.getSyncStatus());
       setActiveUser(dataManager.getActiveUser());
+      setLocalUser(dataManager.getLocalActiveUser());
     });
     return unsubscribe;
   }, []);
@@ -131,6 +242,7 @@ export default function App() {
         else if (key === 'l') { targetRoute = 'learners'; routeName = 'Learners Directory'; }
         else if (key === 'f') { targetRoute = 'finance'; routeName = 'Financial Manager'; }
         else if (key === 'c') { targetRoute = 'calendar'; routeName = 'School Calendar'; }
+        else if (key === 'm') { targetRoute = 'communications'; routeName = 'Communications Engine'; }
         else if (key === 's') { targetRoute = 'settings'; routeName = 'System Settings'; }
         else if (key === 'e') { targetRoute = 'data'; routeName = 'Excel & Data Integration'; }
 
@@ -210,6 +322,8 @@ export default function App() {
 
   // Render sub page
   const renderActivePage = () => {
+    if (!data) return null;
+
     switch (currentRoute) {
       case 'dashboard':
         return <Dashboard data={data} />;
@@ -218,6 +332,16 @@ export default function App() {
           <Learners 
             data={data} 
             onUpdateLearners={handleUpdateLearners} 
+          />
+        );
+      case 'admissions':
+        return (
+          <AdmissionsManager 
+            data={data}
+            onUpdateAdmissions={(adms) => {
+              setData({ ...data, admissions: adms });
+            }}
+            onUpdateLearners={handleUpdateLearners}
           />
         );
       case 'scores':
@@ -244,9 +368,35 @@ export default function App() {
         return (
           <Settings 
             data={data} 
-            onUpdateSettings={handleUpdateSettings} 
+            onUpdateSettings={handleUpdateSettings}
           />
         );
+      case 'hr':
+        return (
+          <HRManager
+            data={data}
+            onUpdateHR={(payroll, appraisals) => {
+              const updatedData = { ...data, hr: { payroll, appraisals } };
+              setData(updatedData);
+              dataManager.saveData(updatedData);
+              addToast("HR data updated successfully", 'success');
+            }}
+            onUpdateStaff={(teachers, nonTeachingStaff) => {
+               const updatedData = { 
+                 ...data, 
+                 settings: { 
+                   ...data.settings, 
+                   teachers, 
+                   nonTeachingStaff 
+                 } 
+               };
+               setData(updatedData);
+               dataManager.saveData(updatedData);
+               addToast("Staff directory updated successfully", 'success');
+            }}
+          />
+        );
+
       case 'calendar':
         return (
           <AcademicCalendar 
@@ -263,13 +413,126 @@ export default function App() {
             onUpdateSecurity={(updatedSec) => dataManager.updateSecurityData(updatedSec)} 
           />
         );
+      case 'transport':
+        return (
+          <TransportManager 
+            data={data} 
+            onUpdateTransport={(updatedTrans) => dataManager.updateTransportData(updatedTrans)} 
+          />
+        );
+      case 'library':
+        return (
+          <LibraryManager 
+            data={data} 
+            onUpdateLibrary={(updatedLib) => dataManager.updateLibraryData(updatedLib)} 
+          />
+        );
+      case 'inventory':
+        return (
+          <InventoryManager 
+            data={data} 
+            onUpdateInventory={(updatedInv) => dataManager.updateInventoryData(updatedInv)} 
+          />
+        );
+      case 'procurement':
+        return (
+          <ProcurementManager 
+            data={data}
+            onUpdateProcurement={(updatedProc) => dataManager.updateProcurementData(updatedProc)}
+            onUpdateInventory={(updatedInv) => dataManager.updateInventoryData(updatedInv)}
+          />
+        );
+      case 'hostel':
+        return (
+          <HostelManager 
+            data={data} 
+            onUpdateHostel={(updatedHostel) => dataManager.updateHostelData(updatedHostel)} 
+          />
+        );
+      case 'timetable':
+        return (
+          <TimetableManager 
+            data={data} 
+            onUpdateTimetable={(updatedTimetable) => dataManager.updateTimetableData(updatedTimetable)} 
+          />
+        );
+      case 'clinic':
+        return (
+          <ClinicManager 
+            data={data} 
+            onUpdateClinic={(updatedClinic) => dataManager.updateClinicData(updatedClinic)} 
+          />
+        );
+      case 'discipline':
+        return (
+          <DisciplineManager 
+            data={data} 
+            onUpdateDiscipline={(updatedDiscipline) => dataManager.updateDisciplineData(updatedDiscipline)} 
+          />
+        );
+      case 'extracurricular':
+        return (
+          <ExtracurricularManager 
+            data={data} 
+            onUpdateExtra={(updatedExtra) => dataManager.updateExtracurricularData(updatedExtra)} 
+          />
+        );
+      case 'student-360':
+        return <Student360 data={data} />;
+      case 'ai-consultant':
+        return <AIChatbot data={data} />;
+      case 'notifications':
+        return <NotificationCenter />;
+      case 'staff-360':
+        return <Staff360 data={data} />;
+      case 'analytics':
+        return <AnalyticsDashboard data={data} />;
+      case 'teacher-attendance':
+        return <TeacherAttendance data={data} />;
+      case 'communications':
+        return (
+          <CommunicationsEngine 
+            data={data}
+            onUpdateCommunications={(comms) => dataManager.updateCommunicationsData(comms)}
+          />
+        );
+      case 'audit-logs':
+        return <AuditLogViewer data={data} />;
       default:
         return <Dashboard data={data} />;
     }
   };
 
+  if (!isDbReady || !data) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-[#F8FAFC]">
+        <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-6 shadow-lg"></div>
+        <h2 className="text-xl font-black text-slate-800 tracking-tight">Initializing Database Engine</h2>
+        <p className="text-slate-500 font-medium text-sm mt-2">Loading core modules and preparing workspace...</p>
+      </div>
+    );
+  }
+
+  if (data.settings.authConfig?.requireLoginOnStartup && !localUser) {
+    return (
+      <div className="flex h-screen bg-slate-100 items-center justify-center font-sans">
+        <AuthModal isOpen={true} onClose={() => {}} />
+      </div>
+    );
+  }
+
+  // Parent Portal Bypass Layout
+  if (currentRoute === 'parent-portal' && data) {
+    return (
+      <ParentPortal 
+        data={data} 
+        onExit={() => setCurrentRoute('dashboard')} 
+      />
+    );
+  }
+
   return (
-    <div className="flex h-screen bg-slate-100 font-sans text-slate-800 select-none antialiased print:bg-white print:p-0 overflow-hidden">
+    <div className="flex h-screen bg-[#F8FAFC] font-sans selection:bg-blue-600/20 selection:text-blue-900 overflow-hidden relative">
       {/* Mobile Sidebar Overlay */}
       {showSidebar && (
         <div 
@@ -289,6 +552,7 @@ export default function App() {
           data={data}
           syncState={syncState}
           user={activeUser}
+          localUser={localUser}
         />
       </div>
 
@@ -310,6 +574,18 @@ export default function App() {
               {currentRoute === 'reports' && 'Report Cards Hub'}
               {currentRoute === 'finance' && 'School Finances & Accounting Ledgers'}
               {currentRoute === 'calendar' && 'School Calendar & Events Planner'}
+              {currentRoute === 'transport' && 'Transport & Fleet Management'}
+              {currentRoute === 'library' && 'Library Management'}
+              {currentRoute === 'inventory' && 'Inventory & Asset Management'}
+              {currentRoute === 'hostel' && 'Hostel & Dormitory Management'}
+              {currentRoute === 'timetable' && 'Class Timetable Scheduler'}
+              {currentRoute === 'clinic' && 'School Clinic & Health'}
+              {currentRoute === 'discipline' && 'Disciplinary & Conduct'}
+              {currentRoute === 'extracurricular' && 'Clubs & Extracurriculars'}
+              {currentRoute === 'student-360' && 'Student 360° Profile'}
+              {currentRoute === 'staff-360' && 'Staff 360° Profile'}
+              {currentRoute === 'communications' && 'Communications Engine'}
+              {currentRoute === 'analytics' && "Principal's Dashboard"}
               {currentRoute === 'data' && 'Excel & Data Integration'}
               {currentRoute === 'settings' && 'System Settings'}
             </h2>
@@ -335,6 +611,13 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <button 
+              onClick={() => setCurrentRoute('parent-portal')}
+              className="hidden sm:block px-3.5 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
+              title="Launch Parent Portal"
+            >
+              Parent Portal
+            </button>
+            <button 
               onClick={() => setCurrentRoute('data')}
               className="hidden sm:block px-3.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
             >
@@ -348,7 +631,7 @@ export default function App() {
               <span className="sm:hidden">Reports</span>
             </button>
             <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 font-bold text-xs text-slate-600 flex items-center justify-center shrink-0">
-              {activeUser ? activeUser.email?.slice(0, 2).toUpperCase() : 'GS'}
+              {localUser ? localUser.name.slice(0, 2).toUpperCase() : (activeUser ? activeUser.email?.slice(0, 2).toUpperCase() : 'GS')}
             </div>
           </div>
         </header>
@@ -371,38 +654,6 @@ export default function App() {
         
         {/* Background Periodic Backup Trigger */}
         <BackupManager data={data} backgroundOnly={true} />
-        
-        {/* Floating AI Consultant Chatbot */}
-        <AIChatbot data={data} />
-
-        {/* Floating System Notification Log Center */}
-        <NotificationCenter />
-
-        {/* Floating Keyboard Shortcuts Guide Trigger */}
-        <div className="fixed bottom-36 right-6 z-50 print:hidden">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowShortcutsHelp(true)}
-            className="w-10 h-10 rounded-full bg-slate-900 text-slate-100 hover:text-white flex items-center justify-center shadow-xl border border-slate-800 hover:bg-slate-950 transition-all cursor-pointer group"
-            title="Keyboard Shortcuts (Press '?')"
-          >
-            <Keyboard size={18} className="group-hover:rotate-12 transition-transform duration-300" />
-          </motion.button>
-        </div>
-
-        {/* Floating Onboarding Tour Trigger */}
-        <div className="fixed bottom-48 right-6 z-50 print:hidden">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowOnboardingTour(true)}
-            className="w-10 h-10 rounded-full bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center shadow-xl border border-blue-500 hover:border-blue-600 transition-all cursor-pointer group animate-pulse hover:animate-none"
-            title="Interactive Onboarding Tour Guide"
-          >
-            <HelpCircle size={18} className="group-hover:rotate-12 transition-transform duration-300" />
-          </motion.button>
-        </div>
       </div>
 
       {/* Keyboard Shortcuts Interactive Guide Overlay */}
@@ -462,6 +713,7 @@ export default function App() {
                       { key: 'L', desc: 'Learners Directory' },
                       { key: 'F', desc: 'Financial Manager' },
                       { key: 'C', desc: 'School Calendar' },
+                      { key: 'M', desc: 'Communications Engine' },
                       { key: 'S', desc: 'System Settings' },
                       { key: 'E', desc: 'Excel & Data Integration' },
                     ].map(item => (

@@ -80,6 +80,61 @@ export interface Teacher {
   phone?: string;
   email?: string;
   specialization?: string;
+  // HR Fields
+  dateOfBirth?: string;
+  dateOfJoining?: string;
+  contractEndDate?: string;
+  baseSalary?: number;
+  tinNumber?: string;
+  nssfNumber?: string;
+  status?: 'Active' | 'On Leave' | 'Terminated';
+}
+
+export interface NonTeachingStaff {
+  id: string;
+  name: string;
+  department: string;
+  phone?: string;
+  photo?: string;
+  // HR Fields
+  dateOfBirth?: string;
+  dateOfJoining?: string;
+  contractEndDate?: string;
+  baseSalary?: number;
+  tinNumber?: string;
+  nssfNumber?: string;
+  status?: 'Active' | 'On Leave' | 'Terminated';
+}
+
+export interface PayrollRecord {
+  id: string;
+  staffId: string;
+  staffType: 'teacher' | 'non-teaching';
+  month: string; // 'YYYY-MM'
+  baseSalary: number;
+  allowances: number;
+  grossPay: number;
+  paye: number;
+  nssfEmployee: number;
+  nssfEmployer: number;
+  netPay: number;
+  status: 'Draft' | 'Paid';
+  paymentDate?: string;
+}
+
+export interface AppraisalRecord {
+  id: string;
+  staffId: string;
+  staffType: 'teacher' | 'non-teaching';
+  date: string;
+  evaluator: string;
+  score: number; // e.g. out of 100
+  comments: string;
+}
+
+export interface HRData {
+  payroll: PayrollRecord[];
+  appraisals: AppraisalRecord[];
 }
 
 export interface PLEOverrideConfig {
@@ -153,6 +208,7 @@ export interface SchoolSettings {
   classTeachers: { [className: string]: ClassTeacher };
   pleOverride: PLEOverrideConfig;
   teachersList?: Teacher[];
+  nonTeachingStaffList?: NonTeachingStaff[];
   reportCardVisibility?: ReportCardVisibility;
   calendarEvents?: CalendarEvent[];
   ledgerDayFees?: number;
@@ -175,6 +231,15 @@ export interface SchoolSettings {
   feeOthers?: number;
   // User Access & Auth Configuration
   authConfig?: AuthAccessConfig;
+  // Shared Module Resources
+  financeCategories?: { id: string; name: string; type: 'income' | 'expense'; color: string }[];
+  hrDepartments?: string[];
+  transportRoutes?: { id: string; name: string; distance?: string; standardCost?: number }[];
+  hostelBlocks?: { id: string; name: string; capacity?: number }[];
+  libraryCategories?: string[];
+  disciplineOffenses?: { id: string; name: string; type: 'Merit' | 'Demerit'; defaultPoints?: number }[];
+  assetLocations?: string[];
+  clinicMedicines?: string[];
 }
 
 export interface ScoreRecord {
@@ -201,7 +266,7 @@ export interface ActivityLog {
   operator: string;
 }
 
-export type SecurityPersonType = 'Student' | 'Teacher' | 'Visitor' | 'Unknown';
+export type SecurityPersonType = 'Student' | 'Teacher' | 'Non-Teaching Staff' | 'Visitor' | 'Unknown' | 'Parent/Guardian';
 export type SecurityGateStatus = 'Locked' | 'Unlocked' | 'Emergency_Open' | 'Emergency_Lock';
 
 export interface GateLogEntry {
@@ -212,26 +277,31 @@ export interface GateLogEntry {
   personId?: string; // Student ID, Teacher ID, or Visitor ID
   classOrDepartment?: string;
   photoUrl?: string;
-  verificationMethod: 'Face Recognition' | 'Fingerprint (ZKTeco)' | 'RFID Card' | 'QR Code' | 'Manual Guard Approval' | 'Unrecognized';
+  verificationMethod: 'Face Recognition' | 'Fingerprint (ZKTeco)' | 'RFID Card' | 'QR Code' | 'Manual Guard Approval' | 'Unrecognized' | 'WhatsApp OTP';
   gateUsed: string; // e.g. "Main Gate - Gate A"
-  direction: 'Entry' | 'Exit';
-  status: 'Present' | 'Late' | 'Left' | 'Approved' | 'Overdue' | 'Alarm_Triggered';
+  direction: 'Entry' | 'Exit' | 'Pickup';
+  status: 'Present' | 'Late' | 'Left' | 'Approved' | 'Overdue' | 'Alarm_Triggered' | 'Picked_Up';
   notes?: string;
   parentNotified?: boolean;
   workHoursLogged?: number;
   temperatureCelsius?: number;
   livenessConfidence?: number; // e.g. 98.5
+  pickedUpStudentId?: string; // Link to the student being picked up
+  pickedUpStudentName?: string;
 }
 
 export interface VisitorRecord {
   id: string;
   visitorName: string;
   phone: string;
+  whatsappVerified: boolean;
   nationalId: string;
   company?: string;
   purpose: string;
   hostTeacherName: string;
+  hostId?: string;
   vehicleNumber?: string;
+  vehicleNumberPlate?: string; // Explicitly tracking number plates
   badgeNumber: string;
   qrCode: string;
   photoUrl?: string;
@@ -269,6 +339,17 @@ export interface SecurityGateSystemConfig {
   zktecoScannerConnected: boolean;
   relayControllerOnline: boolean;
   activeGateName: string;
+  anranCameraIp?: string;
+  fingerprintScannerIp?: string;
+  anranNvrConfig?: {
+    ip: string;
+    cloudId?: string;
+    webPort: string;
+    rtspPort: string;
+    username: string;
+    password?: string;
+    channels: number;
+  };
 }
 
 export interface SecurityData {
@@ -281,7 +362,7 @@ export interface SecurityData {
 export interface FinanceTransaction {
   id: string;
   date: string; // 'YYYY-MM-DD'
-  type: 'income' | 'expense';
+  type: 'income' | 'expense' | 'refund';
   category: string; // 'Tuition Fees', 'Boarding Fees', 'Uniforms', 'Stationery', 'Teacher Salaries', 'Food & Meals', 'Maintenance', 'Utilities', 'Other'
   amount: number;
   studentId?: string; // Optional linked student for fee payments
@@ -295,6 +376,256 @@ export interface FinanceTransaction {
   term?: string; // 'Term 1' | 'Term 2' | 'Term 3'
 }
 
+export interface TransportVan {
+  id: string;
+  plateNumber: string;
+  capacity: number;
+  assignedDriverId?: string; // Links to NonTeachingStaff
+  status: 'Active' | 'In Maintenance' | 'Out of Service';
+  makeAndModel?: string;
+}
+
+export interface FuelLog {
+  id: string;
+  date: string; // ISO
+  vanId: string;
+  liters: number;
+  cost: number;
+  currentMileage: number;
+  receiptUrl?: string;
+  recordedBy: string;
+}
+
+export interface MaintenanceLog {
+  id: string;
+  date: string; // ISO
+  vanId: string;
+  serviceType: 'Routine' | 'Repair' | 'Inspection' | 'Tires' | 'Other';
+  description: string;
+  cost: number;
+  nextServiceDate?: string;
+  recordedBy: string;
+}
+
+export interface TransportData {
+  vans: TransportVan[];
+  fuelLogs: FuelLog[];
+  maintenanceLogs: MaintenanceLog[];
+}
+export interface LibraryBook {
+  id: string;
+  title: string;
+  author: string;
+  isbn?: string;
+  category: string;
+  totalQuantity: number;
+  availableQuantity: number;
+  addedBy: string;
+}
+
+export interface LibraryIssue {
+  id: string;
+  bookId: string;
+  borrowerId: string; // ID of learner or teacher
+  borrowerType: 'Learner' | 'Teacher' | 'Non-Teaching Staff';
+  borrowerName: string; // snapshot for easy display
+  issueDate: string; // ISO
+  dueDate: string; // ISO
+  returnDate?: string; // ISO, if returned
+  status: 'Issued' | 'Returned' | 'Overdue';
+  fineAmount?: number;
+}
+
+export interface LibraryData {
+  books: LibraryBook[];
+  issues: LibraryIssue[];
+}
+
+export interface InventoryAsset {
+  id: string;
+  name: string;
+  category: 'Furniture' | 'Electronics' | 'Lab Equipment' | 'Stationery' | 'Sports' | 'Other';
+  quantity: number;
+  condition: 'New' | 'Good' | 'Fair' | 'Poor' | 'Broken';
+  location: string; // e.g., 'Main Lab', 'Store Room B'
+  assignedTo?: string; // ID of staff member, if applicable
+  purchaseDate?: string;
+  cost?: number;
+  lastUpdated: string;
+}
+
+export interface InventoryData {
+  assets: InventoryAsset[];
+}
+export interface HostelRoom {
+  id: string;
+  name: string; // e.g., 'Room 1', 'Room 2'
+  capacity: number;
+}
+
+export interface HostelDormitory {
+  id: string;
+  name: string; // e.g., 'Mandela House'
+  gender: 'Boys' | 'Girls' | 'Mixed';
+  rooms: HostelRoom[];
+  wardenId?: string; // Links to staff
+}
+
+export interface HostelAllocation {
+  id: string;
+  dormitoryId: string;
+  roomId: string;
+  learnerId: string;
+  allocatedDate: string;
+}
+
+export interface HostelData {
+  dormitories: HostelDormitory[];
+  allocations: HostelAllocation[];
+}
+
+export interface TimetableSlot {
+  id: string;
+  classId: string; // the specific class, e.g. 'P1', 'Senior 1'
+  dayOfWeek: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  subjectId: string;
+  teacherId: string;
+  roomId?: string; // Optional physical room
+}
+
+export interface TimetableData {
+  slots: TimetableSlot[];
+}
+export interface ClinicRecord {
+  learnerId: string;
+  bloodGroup?: string;
+  allergies: string;
+  chronicConditions: string;
+  emergencyContact: string;
+}
+
+export interface ClinicVisit {
+  id: string;
+  learnerId: string;
+  date: string; // ISO
+  symptoms: string;
+  diagnosis: string;
+  treatment: string;
+  medicinePrescribed?: string;
+  nurseName: string;
+}
+
+export interface ClinicData {
+  records: { [learnerId: string]: ClinicRecord };
+  visits: ClinicVisit[];
+}
+
+export interface DisciplineIncident {
+  id: string;
+  learnerId: string;
+  date: string; // ISO
+  type: 'Merit' | 'Demerit';
+  points: number;
+  description: string;
+  actionTaken: string;
+  reportedBy: string; // Staff ID
+}
+
+export interface DisciplineData {
+  incidents: DisciplineIncident[];
+}
+
+export interface Club {
+  id: string;
+  name: string;
+  description: string;
+  patronId: string; // Staff ID
+  meetingDay: string;
+  meetingTime: string;
+}
+
+export interface ClubMembership {
+  id: string;
+  clubId: string;
+  learnerId: string;
+  role: 'Member' | 'President' | 'Secretary' | 'Treasurer' | 'Captain';
+  joinedDate: string;
+}
+
+export interface ExtracurricularData {
+  clubs: Club[];
+  memberships: ClubMembership[];
+}
+
+export interface AdmissionRecord {
+  id: string;
+  applicantName: string;
+  dateOfBirth: string; // YYYY-MM-DD
+  gender: 'Male' | 'Female';
+  targetClass: string;
+  previousSchool?: string;
+  parentName: string;
+  parentPhone: string;
+  parentEmail?: string;
+  applicationDate: string; // ISO
+  entranceExamScore?: number;
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Enrolled';
+  notes?: string;
+}
+
+export interface AdmissionsData {
+  applicants: AdmissionRecord[];
+}
+
+export interface ProcurementRequest {
+  id: string;
+  itemName: string;
+  quantity: number;
+  estimatedCost: number;
+  requestedBy: string; // Staff name or ID
+  department: string;
+  requestDate: string; // ISO
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Fulfilled';
+  approvedBy?: string;
+  notes?: string;
+  fulfilledDate?: string;
+}
+
+export interface ProcurementData {
+  requests: ProcurementRequest[];
+}
+
+export interface CommunicationMessage {
+  id: string;
+  type: 'SMS' | 'Email';
+  recipientId: string; // Learner ID, Staff ID, or Group (e.g., 'ALL_PARENTS')
+  recipientName: string;
+  recipientContact: string; // Phone or Email address
+  body: string;
+  sentAt: string; // ISO date
+  status: 'Sent' | 'Delivered' | 'Failed';
+  sentBy: string; // Admin name
+}
+
+export interface CommunicationsData {
+  messages: CommunicationMessage[];
+}
+
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  userId: string;
+  userName: string;
+  module: 'Finance' | 'Academics' | 'HR' | 'Security' | 'System' | 'Hostel' | 'Transport' | 'Library' | 'Inventory' | 'Admissions' | 'Communications' | 'Procurement';
+  action: 'CREATE' | 'UPDATE' | 'DELETE';
+  recordId: string;
+  details: string;
+  previousValue?: any;
+  newValue?: any;
+}
+
 export interface AppData {
   learners: Learner[];
   scores: { [compositeKey: string]: ScoreRecord }; // "learnerId|examSetId" -> ScoreRecord
@@ -302,6 +633,19 @@ export interface AppData {
   comments: { [compositeKey: string]: CommentRecord }; // "learnerId|examSetId" -> CommentRecord
   settings: SchoolSettings;
   activityLog?: ActivityLog[];
+  auditLogs?: AuditLog[];
   finances?: FinanceTransaction[];
   security?: SecurityData;
+  transport?: TransportData;
+  library?: LibraryData;
+  inventory?: InventoryData;
+  hostel?: HostelData;
+  timetable?: TimetableData;
+  clinic?: ClinicData;
+  discipline?: DisciplineData;
+  extracurricular?: ExtracurricularData;
+  hr?: HRData;
+  admissions?: AdmissionsData;
+  procurement?: ProcurementData;
+  communications?: CommunicationsData;
 }

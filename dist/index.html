@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>School Management System (Academic Evaluator)</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script type="module" crossorigin src="./assets/index-BdNwBYug.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/vendor-core-CNFzCHlr.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-react-ByT_sDve.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-firebase-DS2pravR.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-charts-B0lOcN5x.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-excel-Cst39E-m.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-pdf-luWDtTs7.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-BJT-FRBh.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('Service Worker registered successfully:', reg.scope))
+            .catch(err => console.error('Service Worker registration failed:', err));
+        });
+      }
+    </script>
+  </body>
+</html>
+

@@ -149,125 +149,80 @@ export default function NotificationCenter() {
         };
     }
   };
-
   return (
     <>
-      {/* Floating Notification Drawer Trigger Bell Button */}
-      <div className="fixed bottom-20 right-6 z-50">
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => {
-            setIsDrawerOpen(true);
-            markAllAsRead();
-          }}
-          className="h-12 w-12 bg-white hover:bg-slate-50 text-slate-900 rounded-full shadow-2xl flex items-center justify-center cursor-pointer border border-slate-200 relative"
-        >
-          <Bell size={18} className="text-slate-700" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1.5 min-w-5 h-5 px-1 bg-rose-600 text-[10px] font-black text-white rounded-full flex items-center justify-center border-2 border-white shadow-md">
-              {unreadCount}
-            </span>
-          )}
-        </motion.button>
-      </div>
+      <div className="h-full flex flex-col bg-slate-50 animate-in fade-in duration-300">
+        <div className="flex-1 max-w-7xl mx-auto w-full p-4 lg:p-8 overflow-hidden flex flex-col">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col h-full overflow-hidden">
+          {/* Header */}
+          <div className="bg-slate-900 text-white p-5 lg:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-800 shrink-0 gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-blue-600/35 text-blue-400 rounded-xl border border-blue-500/20">
+                <Activity size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-lg text-slate-100 tracking-tight">System Logs & Performance</h3>
+                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Real-time Diagnostic Center</p>
+              </div>
+            </div>
 
-      {/* Slide-out Floating Modal Notification Drawer */}
-      <AnimatePresence>
-        {isDrawerOpen && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsDrawerOpen(false)}
-              className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs z-[9999] print:hidden"
-            />
-
-            {/* Panel Drawer */}
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 26, stiffness: 220 }}
-              className="fixed top-0 right-0 h-full w-80 sm:w-96 bg-white border-l border-slate-200 shadow-2xl z-[10000] flex flex-col overflow-hidden print:hidden"
-            >
-              {/* Header */}
-              <div className="bg-slate-900 text-white p-4 flex flex-col justify-between border-b border-slate-800 shrink-0 gap-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Activity size={18} className="text-blue-400" />
-                    <h3 className="font-extrabold text-sm text-slate-100 uppercase tracking-tight">Notification &amp; Performance</h3>
-                  </div>
+            {/* Tabs */}
+            <div className="flex bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 text-xs font-bold w-full sm:w-auto">
+              <button
+                onClick={() => setDrawerTab('logs')}
+                className={`flex-1 py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  drawerTab === 'logs'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Bell size={14} />
+                <span>Logs ({notifications.length})</span>
+              </button>
+              <button
+                onClick={() => setDrawerTab('performance')}
+                className={`flex-1 py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  drawerTab === 'performance'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Zap size={14} className="text-amber-400" />
+                <span>Sync</span>
+              </button>
+              <button
+                onClick={() => {
+                  setDrawerTab('audit');
+                  if (!auditSummary) handleRunAudit();
+                }}
+                className={`flex-1 py-1.5 px-3 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  drawerTab === 'audit'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <SearchCheck size={14} className="text-emerald-400" />
+                <span>Audit</span>
+              </button>
+            </div>
+            
+            {drawerTab === 'logs' && (
+              <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold mt-0.5">
+                {notifications.length > 0 && (
                   <button
-                    onClick={() => setIsDrawerOpen(false)}
-                    className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                    onClick={clearAllNotifications}
+                    className="flex items-center gap-1.5 hover:text-rose-400 transition-colors cursor-pointer"
                   >
-                    <X size={16} />
+                    <Trash2 size={12} />
+                    <span>Clear All logs</span>
                   </button>
-                </div>
-
-                {/* Tabs */}
-                <div className="flex bg-slate-800/80 p-0.5 rounded-xl border border-slate-700/60 text-[10.5px] font-bold">
-                  <button
-                    onClick={() => setDrawerTab('logs')}
-                    className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1 ${
-                      drawerTab === 'logs'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <Bell size={12} />
-                    <span>Logs ({notifications.length})</span>
-                  </button>
-                  <button
-                    onClick={() => setDrawerTab('performance')}
-                    className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1 ${
-                      drawerTab === 'performance'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <Zap size={12} className="text-amber-400" />
-                    <span>Sync</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setDrawerTab('audit');
-                      if (!auditSummary) handleRunAudit();
-                    }}
-                    className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1 ${
-                      drawerTab === 'audit'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <SearchCheck size={12} className="text-emerald-400" />
-                    <span>Audit</span>
-                  </button>
-                </div>
-
-                {drawerTab === 'logs' && (
-                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold mt-0.5">
-                    <span className="bg-slate-800 border border-slate-700/60 px-2.5 py-0.5 rounded-md text-[9.5px]">
-                      Total Logs: {notifications.length}
-                    </span>
-                    {notifications.length > 0 && (
-                      <button
-                        onClick={clearAllNotifications}
-                        className="flex items-center gap-1 hover:text-rose-400 transition-colors cursor-pointer"
-                      >
-                        <Trash2 size={11} />
-                        <span>Clear All logs</span>
-                      </button>
-                    )}
-                  </div>
                 )}
               </div>
+            )}
+          </div>
 
-              {/* Drawer Tab Content */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/50 custom-scrollbar">
+          {/* Body Content */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50 custom-scrollbar">
                 {drawerTab === 'audit' ? (
                   <div className="space-y-4">
                     {/* Data Audit Overview Card */}
@@ -544,14 +499,8 @@ export default function NotificationCenter() {
                 )}
               </div>
 
-              {/* Drawer Footer */}
-              <div className="p-3 bg-white border-t border-slate-200 text-center text-[10px] font-bold text-slate-400 tracking-wider uppercase shrink-0">
-                School Sync Log System
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+        </div>
+      </div>
 
       {/* Floating Micro-Modal Toast Notification Panel (Triggers immediately on update) */}
       <AnimatePresence>
@@ -605,6 +554,7 @@ export default function NotificationCenter() {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
     </>
   );
 }

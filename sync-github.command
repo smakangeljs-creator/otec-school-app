@@ -9,13 +9,22 @@ if [ ! -d ".git" ]; then
     git branch -M main
 fi
 
-# Add all changes
-echo "Adding changes..."
-git add .
+# Show what changed
+echo "======================================"
+echo "COMPARING NEW UPDATES (GIT STATUS):"
+echo "======================================"
+git status
+echo "======================================"
 
-# Commit changes
-timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-git commit -m "Auto-sync backup at $timestamp"
+# Check if there are changes to commit
+if [ -n "$(git status --porcelain)" ]; then
+    echo "Changes detected! Adding changes..."
+    git add .
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    git commit -m "Auto-sync backup at $timestamp"
+else
+    echo "No local changes to commit."
+fi
 
 # Pull remote changes if origin is set
 if git remote -v | grep -q 'origin'; then

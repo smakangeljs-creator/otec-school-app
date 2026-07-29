@@ -1,13 +1,11 @@
 @echo off
-cd /d "%~dp0"
-echo Starting OTEC School App...
+setlocal
+echo ========================================================
+echo School Management System - Start Server (Windows)
+echo ========================================================
 
-:: Synchronize Dependencies
-echo Verifying local dependencies...
-call npm install --no-audit --no-fund --prefer-offline
-
-:: Start the development server
-echo Starting the application...
-call npm run desktop:dev
+echo Activating environment and starting the development server...
+echo (The server will be accessible on your local network)
+call npm run dev
 
 pause

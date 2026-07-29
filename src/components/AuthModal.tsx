@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { auth } from '../lib/firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { X, Mail, Lock, User as UserIcon, AlertCircle } from 'lucide-react';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { X, Lock, User as UserIcon, AlertCircle } from 'lucide-react';
+import dataManager from '../lib/db';
+import { SystemUserAccount } from '../types';
+import { defaultSystemUsers } from '../lib/defaults';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -9,11 +12,23 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
-  const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [users, setUsers] = useState<SystemUserAccount[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      const activeUsers = defaultSystemUsers().filter(u => u.active);
+      setUsers(activeUsers);
+      if (activeUsers.length > 0 && !selectedUserId) {
+        setSelectedUserId(activeUsers[0].id);
+      }
+      setPassword('');
+      setError('');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -22,42 +37,47 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setError('');
     setLoading(true);
 
-    let finalEmail = email.trim();
-    const isSpecialAdmin = finalEmail.toLowerCase() === 'admin';
-    if (isSpecialAdmin) {
-      finalEmail = 'admin@otec-reportcards.local';
+    const userToLogin = users.find(u => u.id === selectedUserId);
+
+    if (!userToLogin) {
+      setError('Please select a valid user.');
+      setLoading(false);
+      return;
     }
 
+    if (userToLogin.pinOrPassword !== password) {
+      setError('Invalid password for this account.');
+      setLoading(false);
+      return;
+    }
+
+    // Passwords match locally
     try {
-      if (isRegister) {
-        await createUserWithEmailAndPassword(auth, finalEmail, password);
-      } else {
+      // Set the local session for UI/RBAC
+      dataManager.setLocalActiveUser(userToLogin);
+
+      // If Super Admin, attempt to login to Firebase for Cloud Sync
+      if (userToLogin.role === 'superuser' && userToLogin.username === 'admin') {
+        const finalEmail = 'admin@otec-reportcards.local';
         try {
           await signInWithEmailAndPassword(auth, finalEmail, password);
         } catch (err: any) {
-          // If admin / admin1234 doesn't exist yet, register it silently
-          if (isSpecialAdmin && password === 'admin1234' && (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password')) {
-            await createUserWithEmailAndPassword(auth, finalEmail, password);
-          } else {
-            throw err;
+          // If the admin firebase account doesn't exist yet, register it silently
+          if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+            try {
+              await createUserWithEmailAndPassword(auth, finalEmail, password);
+            } catch (createErr) {
+              console.warn("Failed to create cloud sync account", createErr);
+            }
           }
         }
       }
+
       localStorage.removeItem('otec_manually_signed_out');
       onClose();
     } catch (err: any) {
       console.error(err);
-      if (err.code === 'auth/email-already-in-use') {
-        setError('This email is already registered.');
-      } else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        setError('Invalid email or password.');
-      } else if (err.code === 'auth/weak-password') {
-        setError('Password must be at least 6 characters.');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('Please enter a valid email address.');
-      } else {
-        setError(err.message || 'Authentication failed. Please try again.');
-      }
+      setError('An error occurred during sign-in.');
     } finally {
       setLoading(false);
     }
@@ -79,12 +99,10 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
               <UserIcon size={24} />
             </div>
             <h3 className="text-xl font-bold text-slate-900">
-              {isRegister ? 'Create School Account' : 'Sign In to Report Card System'}
+              System Access
             </h3>
             <p className="text-xs text-slate-500 mt-1">
-              {isRegister 
-                ? 'Back up your report cards and sync to secure cloud storage' 
-                : 'Enter details to synchronize your data in real-time'}
+              Select your role and enter your secure password.
             </p>
           </div>
 
@@ -97,28 +115,21 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <div className="flex justify-between items-center mb-1.5">
-                <label className="block text-xs font-semibold text-slate-600">Email Address or Admin Username</label>
-                {isRegister && (
-                  <button
-                    type="button"
-                    onClick={() => setEmail('smak.angel.JS@gmail.com')}
-                    className="text-[10px] text-blue-600 hover:text-blue-700 font-bold hover:underline transition-all"
-                  >
-                    Use SMAK email
-                  </button>
-                )}
-              </div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Select User Account</label>
               <div className="relative">
-                <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
+                <UserIcon size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <select
+                  value={selectedUserId}
+                  onChange={e => setSelectedUserId(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 font-semibold focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all cursor-pointer appearance-none"
                   required
-                  placeholder="e.g. smak.angel.JS@gmail.com or admin"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
-                />
+                >
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role})
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -140,27 +151,15 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md shadow-blue-600/10 hover:shadow-lg transition-all flex items-center justify-center disabled:opacity-50"
+              className="w-full py-2.5 mt-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm shadow-md shadow-blue-600/10 hover:shadow-lg transition-all flex items-center justify-center disabled:opacity-50"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                isRegister ? 'Register Account' : 'Sign In'
+                'Secure Login'
               )}
             </button>
           </form>
-
-          <div className="mt-6 pt-6 border-t border-slate-100 text-center text-xs">
-            <span className="text-slate-500">
-              {isRegister ? 'Already have an account?' : 'Need a school cloud account?'}
-            </span>{' '}
-            <button
-              onClick={() => { setIsRegister(!isRegister); setError(''); }}
-              className="text-blue-600 hover:text-blue-700 font-bold hover:underline transition-all"
-            >
-              {isRegister ? 'Sign In' : 'Register now'}
-            </button>
-          </div>
         </div>
       </div>
     </div>

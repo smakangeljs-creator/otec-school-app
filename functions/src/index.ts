@@ -51,7 +51,7 @@ Please generate a professional, highly specific, and personalized report card as
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: 'gemini-1.5-flash',
       contents: prompt,
       config: {
         systemInstruction,
@@ -91,7 +91,7 @@ Provide a short 1-2 sentence target coaching advice for this P7 student to secur
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: 'gemini-1.5-flash',
       contents: prompt,
       config: {
         systemInstruction,
@@ -156,11 +156,12 @@ GUIDELINES:
   // or just run it here. We'll run it here for parity.
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: 'gemini-1.5-flash',
       contents,
       config: {
         systemInstruction,
         temperature: 0.4,
+        tools: [{ googleSearch: {} }]
       }
     });
 
