@@ -55,7 +55,7 @@ export default function App() {
     // Initialize IndexedDB
     dataManager.initDB().then((initialData) => {
       // Auto-import external data just once
-      if (!localStorage.getItem('otec_db_imported_v5')) {
+      if (!localStorage.getItem('otec_db_imported_v7')) {
         console.log('Injecting extracted data from extracted_updates.json...');
         
         // Fetch the updates payload
@@ -123,13 +123,23 @@ export default function App() {
                   });
                 }
               });
-              
               mergedData.learners = [...mergedData.learners, ...newLearners];
             }
             
             dataManager.setData(mergedData);
             setData(mergedData);
-            localStorage.setItem('otec_db_imported_v6', 'true');
+            localStorage.setItem('otec_db_imported_v7', 'true');
+            
+            const summaryParts = [];
+            if (newFinances.length > 0) summaryParts.push(`${newFinances.length} financial records`);
+            if (newTeachers.length > 0) summaryParts.push(`${newTeachers.length} teachers`);
+            if (newNTS.length > 0) summaryParts.push(`${newNTS.length} non-teaching staff`);
+            if (updates.learnerUpdates) summaryParts.push(`${updates.learnerUpdates.length} student updates`);
+            
+            const summaryStr = summaryParts.length > 0 ? summaryParts.join(', ') : 'no new records';
+            
+            alert(`System Sync Complete!\n\nYour data has been successfully updated from the Excel extracts.\nSummary of additions:\n- ${summaryStr}`);
+            
             addToast('External Excel data has been successfully merged into the system!', 'success');
           })
           .catch(err => console.error("Failed to load updates:", err));
