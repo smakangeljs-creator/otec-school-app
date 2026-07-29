@@ -50,6 +50,30 @@ export default function App() {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showOnboardingTour, setShowOnboardingTour] = useState(false);
   const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: 'success' | 'info' | 'warning' | 'error' }>>([]);
+  const [cachedLogo, setCachedLogo] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Attempt to quickly read the logo from IndexedDB before full init
+    try {
+      const request = indexedDB.open('OtecAppDB', 1);
+      request.onsuccess = (e) => {
+        const db = (e.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains('otec_store')) return;
+        
+        const tx = db.transaction('otec_store', 'readonly');
+        const store = tx.objectStore('otec_store');
+        const getReq = store.get('app_data');
+        
+        getReq.onsuccess = () => {
+          if (getReq.result && getReq.result.settings && getReq.result.settings.logo) {
+            setCachedLogo(getReq.result.settings.logo);
+          }
+        };
+      };
+    } catch (err) {
+      // Ignore initial DB errors
+    }
+  }, []);
 
   useEffect(() => {
     // Initialize IndexedDB
@@ -516,9 +540,16 @@ export default function App() {
   if (!isDbReady || !data) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#F8FAFC]">
-        <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-6 shadow-lg"></div>
-        <h2 className="text-xl font-black text-slate-800 tracking-tight">Initializing Database Engine</h2>
-        <p className="text-slate-500 font-medium text-sm mt-2">Loading core modules and preparing workspace...</p>
+        {cachedLogo ? (
+          <div className="relative mb-6">
+            <div className="absolute inset-0 bg-blue-100 rounded-full animate-ping opacity-75"></div>
+            <img src={cachedLogo} alt="School Logo" className="w-24 h-24 object-contain rounded-full shadow-lg relative z-10 animate-bounce" />
+          </div>
+        ) : (
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-6 shadow-lg"></div>
+        )}
+        <h2 className="text-xl font-black text-slate-800 tracking-tight">Welcome to OTEC Edu-AI</h2>
+        <p className="text-slate-500 font-medium text-sm mt-2">Loading your digital campus...</p>
       </div>
     );
   }
