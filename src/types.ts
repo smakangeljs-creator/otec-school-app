@@ -118,8 +118,9 @@ export interface PayrollRecord {
   nssfEmployee: number;
   nssfEmployer: number;
   netPay: number;
-  status: 'Draft' | 'Paid';
+  status: 'Pending' | 'Paid';
   paymentDate?: string;
+  financeTransactionId?: string; // Links this payslip to a Finance Ledger entry
 }
 
 export interface TeacherAppraisalMetrics {
@@ -376,6 +377,59 @@ export interface SecurityData {
   config: SecurityGateSystemConfig;
 }
 
+export interface BankAccount {
+  id: string;
+  name: string; // e.g., "Centenary Bank - Main", "School Cash Box"
+  accountNumber: string;
+  bankName: string;
+  initialBalance: number;
+}
+
+export interface BankTransfer {
+  id: string;
+  date: string; // 'YYYY-MM-DD'
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  reference: string;
+  recordedBy: string;
+}
+
+export interface Vendor {
+  id: string;
+  name: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  category: string; // e.g., 'Food Supplies', 'Stationery', 'Maintenance'
+  balanceOwed: number; // Positive means we owe them
+}
+
+export interface VendorInvoice {
+  id: string;
+  vendorId: string;
+  invoiceNumber: string;
+  date: string; // 'YYYY-MM-DD'
+  dueDate: string; // 'YYYY-MM-DD'
+  amount: number;
+  amountPaid: number;
+  status: 'Unpaid' | 'Partial' | 'Paid';
+  description: string;
+}
+
+export interface PettyCashRequisition {
+  id: string;
+  staffId: string;
+  staffName: string;
+  date: string; // 'YYYY-MM-DD'
+  amount: number;
+  category: string;
+  description: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  approvedBy?: string;
+  financeTransactionId?: string; // Linked when approved
+}
+
 export interface FinanceTransaction {
   id: string;
   date: string; // 'YYYY-MM-DD'
@@ -391,6 +445,7 @@ export interface FinanceTransaction {
   title?: string;
   payerOrPayee?: string;
   term?: string; // 'Term 1' | 'Term 2' | 'Term 3'
+  bankAccountId?: string; // Links transaction to a specific bank account or cash box
 }
 
 export interface TransportVan {
@@ -665,4 +720,9 @@ export interface AppData {
   admissions?: AdmissionsData;
   procurement?: ProcurementData;
   communications?: CommunicationsData;
+  bankAccounts?: BankAccount[];
+  bankTransfers?: BankTransfer[];
+  vendors?: Vendor[];
+  vendorInvoices?: VendorInvoice[];
+  requisitions?: PettyCashRequisition[];
 }

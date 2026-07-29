@@ -584,7 +584,11 @@ export function getDemoData(): AppData {
           sentBy: 'Ssemakula Joseph'
         }
       ]
-    }
+    },
+    auditLogs: [],
+    vendors: [],
+    vendorInvoices: [],
+    requisitions: []
   };
 }
 

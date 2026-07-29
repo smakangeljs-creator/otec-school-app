@@ -354,9 +354,54 @@ export default function App() {
     addToast('All local student data was reset to system defaults.', 'warning');
   };
 
+  // RBAC Roles Definition
+  const ROUTE_ROLES: Record<string, string[]> = {
+    'dashboard': ['superuser', 'teacher', 'accountant', 'security'],
+    'analytics': ['superuser'],
+    'student-360': ['superuser', 'teacher', 'accountant'],
+    'staff-360': ['superuser'],
+    'hr': ['superuser', 'accountant'],
+    'admissions': ['superuser', 'accountant'],
+    'learners': ['superuser', 'teacher', 'accountant'],
+    'scores': ['superuser', 'teacher'],
+    'reports': ['superuser', 'teacher'],
+    'finance': ['superuser', 'accountant'],
+    'security': ['superuser', 'security'],
+    'transport': ['superuser', 'accountant', 'security'],
+    'library': ['superuser', 'teacher'],
+    'inventory': ['superuser', 'accountant'],
+    'procurement': ['superuser', 'accountant'],
+    'hostel': ['superuser', 'teacher'],
+    'clinic': ['superuser', 'teacher'],
+    'discipline': ['superuser', 'teacher', 'security'],
+    'extracurricular': ['superuser', 'teacher'],
+    'timetable': ['superuser', 'teacher'],
+    'teacher-attendance': ['superuser', 'security', 'teacher'],
+    'calendar': ['superuser', 'teacher', 'accountant', 'security'],
+    'data': ['superuser'],
+    'settings': ['superuser'],
+    'communications': ['superuser', 'teacher', 'accountant'],
+    'ai-consultant': ['superuser', 'accountant', 'teacher'],
+    'notifications': ['superuser'],
+    'audit-logs': ['superuser'],
+  };
+
   // Render sub page
   const renderActivePage = () => {
     if (!data) return null;
+
+    if (localUser && ROUTE_ROLES[currentRoute] && !ROUTE_ROLES[currentRoute].includes(localUser.role)) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full w-full text-center px-4 bg-slate-50">
+          <div className="w-24 h-24 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mb-6">
+            <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+          </div>
+          <h2 className="text-2xl font-black text-slate-800 mb-2">Access Denied</h2>
+          <p className="text-slate-500 max-w-md">Your current role ({localUser.role}) does not have permission to view the "{currentRoute}" module. Please contact the system administrator if you believe this is an error.</p>
+          <button onClick={() => setCurrentRoute('dashboard')} className="mt-8 px-6 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all shadow-md">Return to Dashboard</button>
+        </div>
+      );
+    }
 
     switch (currentRoute) {
       case 'dashboard':

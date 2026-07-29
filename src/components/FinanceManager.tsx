@@ -3,6 +3,9 @@ import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { AppData, Learner, FinanceTransaction } from '../types';
 import dataManager from '../lib/db';
+import AuditLogViewer from './AuditLogViewer';
+import FinanceVendorsTab from './FinanceVendorsTab';
+import FinanceRequisitionsTab from './FinanceRequisitionsTab';
 import { mergeDriveDataWithSummary } from '../lib/dataSyncMerge';
 import { 
   googleSignIn, 
@@ -14,7 +17,7 @@ import {
   syncXlsxReportToDrive
 } from '../lib/googleDriveService';
 import { 
-  Plus, 
+  Store, ShieldAlert, Plus, 
   ArrowUpRight, 
   ArrowDownRight, 
   Wallet, 
@@ -2020,7 +2023,7 @@ interface FinanceManagerProps {
 
 export default function FinanceManager({ data }: FinanceManagerProps) {
   const [transactions, setTransactions] = useState<FinanceTransaction[]>(data.finances || []);
-  const [subTab, setSubTab] = useState<'ledger' | 'fees' | 'feesInput' | 'dailyExpense' | 'monthly' | 'calendar' | 'expenditureBreakdown' | 'report'>('ledger');
+  const [subTab, setSubTab] = useState<'ledger' | 'fees' | 'feesInput' | 'dailyExpense' | 'monthly' | 'calendar' | 'expenditureBreakdown' | 'report' | 'banking' | 'vendors' | 'requisitions' | 'audit'>('ledger');
   const [reportStartDate, setReportStartDate] = useState<string>('');
   const [reportEndDate, setReportEndDate] = useState<string>('');
   const [reportPreset, setReportPreset] = useState<string>('all');
@@ -2038,6 +2041,7 @@ export default function FinanceManager({ data }: FinanceManagerProps) {
   const [editTxDate, setEditTxDate] = useState(new Date().toISOString().split('T')[0]);
   const [editTxTerm, setEditTxTerm] = useState('Term 1');
   const [editTxMethod, setEditTxMethod] = useState<'Cash' | 'Bank Transfer' | 'Mobile Money' | 'Cheque'>('Cash');
+  const [editTxBankAccountId, setEditTxBankAccountId] = useState('');
   const [editTxStudentId, setEditTxStudentId] = useState('');
   const [editTxStudentSearch, setEditTxStudentSearch] = useState('');
   const [editTxDesc, setEditTxDesc] = useState('');
@@ -2540,6 +2544,15 @@ export default function FinanceManager({ data }: FinanceManagerProps) {
       `Recorded ${newTx.type} transaction of ${formatUGX(newTx.amount)} under category "${newTx.category}"${linkageDetails}.`
     );
 
+    // [AUDIT TRAIL] Immutable record of financial creation
+    dataManager.saveAuditLog({
+      module: 'Finance',
+      action: 'CREATE',
+      recordId: newTx.id,
+      details: `Created new transaction: ${formatUGX(newTx.amount)} for ${newTx.category}`,
+      newValue: newTx
+    });
+
     // Reset Form & Close Modal
     setTxAmount('');
     setTxDescription('');
@@ -2571,6 +2584,7 @@ export default function FinanceManager({ data }: FinanceManagerProps) {
     setEditTxDate(tx.date);
     setEditTxTerm(tx.term || 'Term 1');
     setEditTxMethod(tx.paymentMethod);
+    setEditTxBankAccountId(tx.bankAccountId || '');
     setEditTxStudentId(tx.studentId || '');
     setEditTxStudentSearch('');
     setEditTxDesc(tx.description);
@@ -2599,6 +2613,7 @@ export default function FinanceManager({ data }: FinanceManagerProps) {
       date: editTxDate,
       term: editTxTerm,
       paymentMethod: editTxMethod,
+      bankAccountId: editTxBankAccountId,
       studentId: editTxType === 'income' && editTxStudentId ? editTxStudentId : undefined,
       description: editTxDesc.trim() || `${effectiveCategory} recording`
     };
@@ -2618,6 +2633,16 @@ export default function FinanceManager({ data }: FinanceManagerProps) {
       'finance_modified',
       `Updated ${updatedTx.type} transaction: ${formatUGX(updatedTx.amount)} (${updatedTx.category}) on ${updatedTx.date}.`
     );
+
+    // [AUDIT TRAIL] Immutable record of financial edit
+    dataManager.saveAuditLog({
+      module: 'Finance',
+      action: 'UPDATE',
+      recordId: updatedTx.id,
+      details: `Edited transaction from ${formatUGX(editingTx.amount)} to ${formatUGX(updatedTx.amount)}`,
+      previousValue: editingTx,
+      newValue: updatedTx
+    });
 
     setShowEditTxModal(false);
     setEditingTx(null);
@@ -2647,6 +2672,15 @@ export default function FinanceManager({ data }: FinanceManagerProps) {
         'finance_modified',
         `Deleted school ledger transaction: ${target.type} of ${formatUGX(target.amount)} recorded on ${target.date}.`
       );
+
+      // [AUDIT TRAIL] Immutable record of financial deletion
+      dataManager.saveAuditLog({
+        module: 'Finance',
+        action: 'DELETE',
+        recordId: target.id,
+        details: `Deleted transaction: ${formatUGX(target.amount)} for ${target.category}`,
+        previousValue: target
+      });
 
       window.dispatchEvent(new CustomEvent('otec-toast', {
         detail: {
@@ -3370,6 +3404,17 @@ OTEC Academy Automated Finance Systems
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-200 pb-3 print:hidden">
         <div className="flex items-center gap-1 overflow-x-auto pb-1 custom-scrollbar">
           <button
+            onClick={() => setSubTab('banking')}
+            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+              subTab === 'banking'
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
+          >
+            <Building size={14} />
+            <span>Banking & Ledgers</span>
+          </button>
+          <button
             onClick={() => setSubTab('ledger')}
             className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
               subTab === 'ledger'
@@ -3860,6 +3905,8 @@ OTEC Academy Automated Finance Systems
           </div>
 
         </div>
+      ) : subTab === 'banking' ? (
+        <FinanceBankingTab data={data} transactions={transactions} />
       ) : subTab === 'fees' ? (
         /* ================= STUDENT FEE ACCOUNTS & RECOVERY VIEW ================= */
         <div className="space-y-8 animate-in fade-in duration-300">
@@ -4964,6 +5011,12 @@ OTEC Academy Automated Finance Systems
             );
           })()}
         </div>
+      ) : subTab === 'vendors' ? (
+        <FinanceVendorsTab data={data} />
+      ) : subTab === 'requisitions' ? (
+        <FinanceRequisitionsTab data={data} />
+      ) : subTab === 'audit' ? (
+        <AuditLogViewer data={data} />
       ) : subTab === 'calendar' ? (
         /* ================= FINANCIAL EXPENSE CALENDAR VIEW ================= */
         <div className="space-y-6 animate-in fade-in duration-300">
@@ -8002,6 +8055,21 @@ OTEC Academy Automated Finance Systems
                   <option value="Bank Transfer">Bank Transfer</option>
                   <option value="Mobile Money">Mobile Money</option>
                   <option value="Cheque">Cheque</option>
+                </select>
+              </div>
+
+              {/* Bank Account / Ledger */}
+              <div className="space-y-1.5">
+                <label className="block font-bold text-slate-600 uppercase tracking-wider text-[10px]">Bank Account / Ledger</label>
+                <select
+                  value={editTxBankAccountId}
+                  onChange={(e) => setEditTxBankAccountId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-hidden focus:bg-white focus:border-blue-600"
+                >
+                  <option value="ba-main-cash">Main Cash Box</option>
+                  {(data.bankAccounts || []).filter(a => a.id !== 'ba-main-cash').map(a => (
+                    <option key={a.id} value={a.id}>{a.name} ({a.bankName})</option>
+                  ))}
                 </select>
               </div>
 

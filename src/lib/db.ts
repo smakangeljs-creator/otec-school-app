@@ -2,7 +2,7 @@ import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInAnonymously } from 'firebase/auth';
 import { silentSyncToGoogleDrive, autoRestoreFromGoogleDrive } from './googleDriveService';
-import { AppData, SchoolSettings, Learner, ScoreRecord, PsychomotorRecord, CommentRecord, ActivityLog, FinanceTransaction, SecurityData, GateLogEntry, VisitorRecord, UnknownPersonAlert, SecurityGateSystemConfig, TransportData, LibraryData, InventoryData, HostelData, TimetableData, ClinicData, DisciplineData, ExtracurricularData, HRData, AdmissionsData, ProcurementData } from '../types';
+import { AppData, SchoolSettings, Learner, ScoreRecord, PsychomotorRecord, CommentRecord, ActivityLog, FinanceTransaction, SecurityData, GateLogEntry, VisitorRecord, UnknownPersonAlert, SecurityGateSystemConfig, TransportData, LibraryData, InventoryData, HostelData, TimetableData, ClinicData, DisciplineData, ExtracurricularData, HRData, AdmissionsData, ProcurementData, Vendor, VendorInvoice, PettyCashRequisition, AuditLog } from '../types';
 import { getDemoData, defaultSettings, defaultPrePrimaryGradingBands, defaultSectionSubjects, regenerateUNEBNumbers, getDemoSecurityData } from './defaults';
 
 export interface SyncMetric {
@@ -298,19 +298,23 @@ function broadcastDataChange(data: AppData) {
 }
 
 // Write to local storage (Asynchronous IndexedDB wrapper for speed)
-async function saveToLocalAsync(data: AppData) {
+async function saveToLocalAsync(data: AppData, modifiedKey?: keyof AppData) {
   try {
-    for (const key of Object.keys(data)) {
-      await idb.set(key, (data as any)[key]);
+    if (modifiedKey) {
+      await idb.set(modifiedKey, (data as any)[modifiedKey]);
+    } else {
+      for (const key of Object.keys(data)) {
+        await idb.set(key, (data as any)[key]);
+      }
     }
   } catch (e) {
     console.error('Failed to save to IndexedDB', e);
   }
 }
 
-function saveToLocal(data: AppData, skipBroadcast: boolean = false) {
+function saveToLocal(data: AppData, skipBroadcast: boolean = false, modifiedKey?: keyof AppData) {
   // Fire and forget IndexedDB save (non-blocking)
-  saveToLocalAsync(data).catch(console.error);
+  saveToLocalAsync(data, modifiedKey).catch(console.error);
   
   if (!skipBroadcast) {
     hasLocalDirtyState = true;
@@ -670,11 +674,49 @@ export const dataManager = {
   },
 
   // Modify specific aspects
+  saveAuditLog(log: Omit<AuditLog, 'id' | 'timestamp' | 'userId' | 'userName'>) {
+    if (!currentData.auditLogs) {
+      currentData.auditLogs = [];
+    }
+    const newLog: AuditLog = {
+      id: 'audit-' + Math.random().toString(36).slice(2, 9),
+      timestamp: new Date().toISOString(),
+      userId: activeUser?.uid || 'system',
+      userName: activeUser?.displayName || activeUser?.email || 'System Admin',
+      ...log
+    };
+    currentData.auditLogs = [newLog, ...currentData.auditLogs].slice(0, 1000); // Keep last 1000 entries
+    saveToLocal(currentData, false, 'auditLogs');
+    this.triggerUpdate();
+    this.syncWithCloud(true, 'audit_logged', 'auditLogs');
+  },
+
+  updateVendors(vendors: Vendor[]) {
+    currentData.vendors = vendors;
+    saveToLocal(currentData, false, 'vendors');
+    this.triggerUpdate();
+    this.syncWithCloud(true, 'vendors_updated', 'vendors');
+  },
+
+  updateVendorInvoices(invoices: VendorInvoice[]) {
+    currentData.vendorInvoices = invoices;
+    saveToLocal(currentData, false, 'vendorInvoices');
+    this.triggerUpdate();
+    this.syncWithCloud(true, 'vendorInvoices_updated', 'vendorInvoices');
+  },
+
+  updateRequisitions(requisitions: PettyCashRequisition[]) {
+    currentData.requisitions = requisitions;
+    saveToLocal(currentData, false, 'requisitions');
+    this.triggerUpdate();
+    this.syncWithCloud(true, 'requisitions_updated', 'requisitions');
+  },
+
   updateSettings(settings: SchoolSettings) {
     currentData.settings = settings;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'settings');
     this.triggerUpdate();
-    this.syncWithCloud(true, 'settings_updated');
+    this.syncWithCloud(true, 'settings_updated', 'settings');
     this.addActivityLog('settings_modified', `School configurations updated for term ${settings.term} (${settings.schoolName}).`);
   },
 
@@ -687,9 +729,9 @@ export const dataManager = {
 
     // Save the new learners
     currentData.learners = regenerateUNEBNumbers(learners);
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'learners');
     this.triggerUpdate();
-    this.syncWithCloud(true, 'learners_updated');
+    this.syncWithCloud(true, 'learners_updated', 'learners');
 
     // Check for students whose balance fell below 20% of total term fees
     currentData.learners.forEach(student => {
@@ -739,120 +781,135 @@ export const dataManager = {
       });
     }
 
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'scores');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'scores');
   },
 
   updatePsychomotor(compositeKey: string, psychoRecord: PsychomotorRecord) {
     currentData.psychomotor[compositeKey] = psychoRecord;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'psychomotor');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'psychomotor');
   },
 
   updateComments(compositeKey: string, commentRecord: CommentRecord) {
     currentData.comments[compositeKey] = commentRecord;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'comments');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'comments');
   },
 
   updateFinances(finances: FinanceTransaction[]) {
     currentData.finances = finances;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'finances');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'finances');
   },
+
+  updateBankAccounts(bankAccounts: BankAccount[]) {
+    currentData.bankAccounts = bankAccounts;
+    saveToLocal(currentData, false, 'bankAccounts');
+    this.triggerUpdate();
+    this.syncWithCloud(false, 'data_mutation', 'bankAccounts');
+  },
+
+  updateBankTransfers(bankTransfers: BankTransfer[]) {
+    currentData.bankTransfers = bankTransfers;
+    saveToLocal(currentData, false, 'bankTransfers');
+    this.triggerUpdate();
+    this.syncWithCloud(false, 'data_mutation', 'bankTransfers');
+  },
+
 
   updateSecurityData(security: SecurityData) {
     currentData.security = security;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'security');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'security');
   },
 
   updateTransportData(transport: TransportData) {
     currentData.transport = transport;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'transport');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'transport');
   },
 
   updateLibraryData(library: LibraryData) {
     currentData.library = library;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'library');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'library');
   },
 
   updateInventoryData(inventory: InventoryData) {
     currentData.inventory = inventory;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'inventory');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'inventory');
   },
 
   updateHostelData(hostel: HostelData) {
     currentData.hostel = hostel;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'hostel');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'hostel');
   },
 
   updateTimetableData(timetable: TimetableData) {
     currentData.timetable = timetable;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'timetable');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'timetable');
   },
 
   updateClinicData(clinic: ClinicData) {
     currentData.clinic = clinic;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'clinic');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'clinic');
   },
 
   updateDisciplineData(discipline: DisciplineData) {
     currentData.discipline = discipline;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'discipline');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'discipline');
   },
 
   updateExtracurricularData(extracurricular: ExtracurricularData) {
     currentData.extracurricular = extracurricular;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'extracurricular');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'extracurricular');
   },
 
   updateAdmissionsData(admissions: AdmissionsData) {
     currentData.admissions = admissions;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'admissions');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'admissions');
   },
 
   updateProcurementData(procurement: ProcurementData) {
     currentData.procurement = procurement;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'procurement');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'procurement');
   },
 
   updateCommunicationsData(communications: CommunicationsData) {
     currentData.communications = communications;
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'communications');
     this.triggerUpdate();
-    this.syncWithCloud();
+    this.syncWithCloud(false, 'data_mutation', 'communications');
   },
 
   // Clear everything and load demo
   resetToDefaults() {
     currentData = getDemoData();
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'communications');
     this.addActivityLog('reset_defaults', 'Database cleared and reset to system demo defaults.');
   },
 
@@ -875,7 +932,7 @@ export const dataManager = {
       discipline: { incidents: [] },
       extracurricular: { clubs: [], memberships: [] }
     };
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'communications');
     this.addActivityLog('wipe_data', 'Database wiped clean for fresh real data entry.');
   },
 
@@ -931,7 +988,7 @@ export const dataManager = {
       }
       syncStatus = 'syncing';
       this.triggerUpdate();
-      this.syncWithCloud();
+      this.syncWithCloud(false, 'data_mutation', 'communications');
     } else {
       if (unsubscribeSnapshot) {
         unsubscribeSnapshot();
@@ -952,7 +1009,7 @@ export const dataManager = {
   },
 
   async forceSync() {
-    return this.syncWithCloud(true, 'manual_force');
+    return this.syncWithCloud(true, 'manual_force', 'communications');
   },
 
   // Dirty State Management
@@ -973,19 +1030,19 @@ export const dataManager = {
   resolveConflict(choice: 'local' | 'incoming' | 'merge', resolvedData?: AppData) {
     if (choice === 'local') {
       hasLocalDirtyState = false;
-      saveToLocal(currentData);
-      this.syncWithCloud(true, 'conflict_resolve_local');
+      saveToLocal(currentData, false, 'communications');
+      this.syncWithCloud(true, 'conflict_resolve_local', 'communications');
     } else if (choice === 'incoming' && resolvedData) {
       hasLocalDirtyState = false;
       currentData = migrateLowerPrimarySubjects(resolvedData);
-      saveToLocal(currentData, true);
+      saveToLocal(currentData, true, 'communications');
       this.triggerUpdate();
     } else if (choice === 'merge' && resolvedData) {
       hasLocalDirtyState = false;
       currentData = migrateLowerPrimarySubjects(resolvedData);
-      saveToLocal(currentData);
+      saveToLocal(currentData, false, 'communications');
       this.triggerUpdate();
-      this.syncWithCloud(true, 'conflict_resolve_merge');
+      this.syncWithCloud(true, 'conflict_resolve_merge', 'communications');
     }
   },
 
@@ -1037,9 +1094,9 @@ export const dataManager = {
     };
     currentData.activityLog = [simulatedLog, ...currentData.activityLog].slice(0, 50);
     
-    saveToLocal(currentData);
+    saveToLocal(currentData, false, 'communications');
     this.triggerUpdate();
-    this.syncWithCloud(true, 'multi_browser_sim');
+    this.syncWithCloud(true, 'multi_browser_sim', 'communications');
     
     window.dispatchEvent(new CustomEvent('otec-toast', {
       detail: {
@@ -1050,7 +1107,7 @@ export const dataManager = {
   },
 
   // Sync state to Firebase Firestore & Workspace Cloud Server
-  async syncWithCloud(force: boolean = false, triggerReason: string = 'data_mutation') {
+  async syncWithCloud(force: boolean = false, triggerReason: string = 'data_mutation', modifiedKey?: keyof AppData) {
     if (!syncEnabled) {
       syncStatus = 'offline';
       this.triggerUpdate();
@@ -1095,7 +1152,11 @@ export const dataManager = {
 
       if (activeUser) {
         const userDocRef = doc(db, 'users', activeUser.uid, 'data', 'appState');
-        await setDoc(userDocRef, sanitizeForFirestore(currentData));
+        if (modifiedKey) {
+          await setDoc(userDocRef, { [modifiedKey]: sanitizeForFirestore((currentData as any)[modifiedKey]) }, { merge: true });
+        } else {
+          await setDoc(userDocRef, sanitizeForFirestore(currentData));
+        }
       }
 
       const durationMs = Math.round(performance.now() - startTime);
@@ -1173,7 +1234,7 @@ export const dataManager = {
       newValue
     };
     currentData.auditLogs = [newLog, ...currentData.auditLogs].slice(0, 1000); // Keep last 1000 entries
-    saveToLocal(currentData, true);
+    saveToLocal(currentData, true, 'communications');
     this.triggerUpdate();
   },
 
@@ -1188,7 +1249,7 @@ export const dataManager = {
         if (driveData && driveData.learners) {
           const migrated = migrateLowerPrimarySubjects(driveData);
           currentData = migrated;
-          saveToLocal(currentData);
+          saveToLocal(currentData, false, 'communications');
           dataManager.triggerUpdate();
           
           window.dispatchEvent(new CustomEvent('otec-modal-notify', {
@@ -1222,7 +1283,7 @@ export const dataManager = {
               let cloudData = docSnap.data() as AppData;
               cloudData = migrateLowerPrimarySubjects(cloudData);
               currentData = cloudData;
-              saveToLocal(currentData);
+              saveToLocal(currentData, false, 'communications');
               syncStatus = 'synced';
               localStorage.setItem('otec_last_synced', new Date().toISOString());
             } else {
@@ -1300,7 +1361,7 @@ export const dataManager = {
 // Function to flush and save updated database state when closing or leaving the app
 function saveOnAppClose() {
   try {
-    saveToLocal(currentData, true);
+    saveToLocal(currentData, true, 'communications');
     // Firestore handles offline caching automatically on writes
     console.log('App closing: Updated data saved to local storage/Firestore offline cache.');
   } catch (err) {

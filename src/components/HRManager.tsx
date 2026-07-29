@@ -8,6 +8,7 @@ import {
 import app from '../lib/firebase';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import DataTable, { ColumnDef } from './ui/DataTable';
+import dataManager from '../lib/db';
 
 interface HRManagerProps {
   data: AppData;
@@ -64,6 +65,8 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
   
   // Print States
   const [printingPayslipId, setPrintingPayslipId] = useState<string | null>(null);
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>('');
   const [printingContractId, setPrintingContractId] = useState<string | null>(null);
   
   // Combine all staff into a unified view
@@ -96,6 +99,52 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
       return end > today && end <= thirtyDaysFromNow;
     });
   }, [allStaff]);
+
+  const handleMarkAsPaid = () => {
+    if (!markingPaidId || !selectedBankAccountId) return;
+    
+    const pr = data.hr?.payroll.find(p => p.id === markingPaidId);
+    const staff = [...(data.settings?.teachers || []), ...(data.settings?.nonTeachingStaff || [])].find(s => s.id === pr?.staffId);
+    if (!pr || !staff) return;
+
+    const txId = 'tx-' + Math.random().toString(36).slice(2, 9);
+    
+    // Create finance transaction
+    const newTx = {
+      id: txId,
+      type: 'expense' as const,
+      category: 'Salaries & Wages',
+      amount: pr.netPay,
+      date: new Date().toISOString().split('T')[0],
+      term: data.settings?.term || 'Term 1 2026',
+      description: `Payroll: ${staff.name} for ${pr.month}`,
+      recordedBy: dataManager.getActiveUser()?.email?.split('@')[0] || 'System',
+      paymentMethod: 'Bank Transfer' as const,
+      bankAccountId: selectedBankAccountId
+    };
+    
+    const currentFinances = data.finances || [];
+    dataManager.updateFinances([newTx, ...currentFinances]);
+    
+    // Update payroll record
+    const updatedPayroll = data.hr!.payroll.map(p => {
+      if (p.id === markingPaidId) {
+        return { ...p, status: 'Paid' as const, paymentDate: new Date().toISOString(), financeTransactionId: txId };
+      }
+      return p;
+    });
+    
+    onUpdateHR(updatedPayroll, data.hr?.appraisals || []);
+    
+    dataManager.addActivityLog(
+      'finance_modified',
+      `Processed payroll for ${staff.name}, net pay ${newTx.amount.toLocaleString()} linked to ledger.`
+    );
+    
+    setMarkingPaidId(null);
+    setSelectedBankAccountId('');
+    window.dispatchEvent(new CustomEvent('otec-toast', { detail: { message: 'Payroll marked as paid and posted to ledger.', type: 'success' }}));
+  };
 
   // Payroll generation
   const handleGeneratePayroll = () => {
@@ -579,13 +628,24 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button
-                              onClick={() => setPrintingPayslipId(pr.id)}
-                              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors inline-flex items-center justify-center"
-                              title="Print Payslip"
-                            >
-                              <FileText size={14} />
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              {pr.status !== 'Paid' && (
+                                <button
+                                  onClick={() => setMarkingPaidId(pr.id)}
+                                  className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors inline-flex items-center justify-center"
+                                  title="Mark as Paid"
+                                >
+                                  <DollarSign size={14} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setPrintingPayslipId(pr.id)}
+                                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors inline-flex items-center justify-center"
+                                title="Print Payslip"
+                              >
+                                <FileText size={14} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -673,6 +733,54 @@ Output valid JSON ONLY with the keys "comments" and "recommendations". No markdo
           </div>
         )}
       </div>
+
+      {/* Mark Paid Modal */}
+      {markingPaidId && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-slate-50 border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <DollarSign size={18} className="text-emerald-600" />
+                Process Payroll Payment
+              </h3>
+              <button onClick={() => setMarkingPaidId(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600 mb-4">Select the source bank account to fund this payroll expense. A corresponding ledger transaction will be auto-generated.</p>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Source Bank Account</label>
+                <select 
+                  className="w-full border-slate-200 rounded-lg text-sm"
+                  value={selectedBankAccountId}
+                  onChange={(e) => setSelectedBankAccountId(e.target.value)}
+                >
+                  <option value="">-- Select Account --</option>
+                  {data.settings?.bankAccounts?.map(acc => (
+                    <option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountName} ({acc.accountNumber})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="bg-slate-50 border-t border-slate-100 px-6 py-4 flex justify-end gap-3">
+              <button 
+                onClick={() => setMarkingPaidId(null)}
+                className="px-4 py-2 text-slate-600 font-semibold hover:bg-slate-100 rounded-lg text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleMarkAsPaid}
+                disabled={!selectedBankAccountId}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-lg text-sm transition-colors flex items-center gap-2"
+              >
+                <CheckCircle size={16} /> Record Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit HR Modal */}
       {editingStaffId && (

@@ -872,203 +872,205 @@ export default function Settings({ data, onUpdateSettings }: SettingsProps) {
       <div className="mt-6">
         {/* TAB 1: School Header Info */}
         {activeTab === 'school' && (
-          <form onSubmit={handleSaveGeneral} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6">
-            <h3 className="text-sm font-bold text-slate-950 pb-2 border-b border-slate-100">School Profile Headers</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Official School Name</label>
-                <input
-                  type="text"
-                  required
-                  value={schoolName}
-                  onChange={e => setSchoolName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Short Code Name (Sidebar Display)</label>
-                <input
-                  type="text"
-                  required
-                  value={shortName}
-                  onChange={e => setShortName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-slate-600 mb-1">School Motto Slogan</label>
-                <input
-                  type="text"
-                  value={motto}
-                  onChange={e => setMotto(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-slate-600 mb-1">Postal / Physical Address</label>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Primary Telephone Line</label>
-                <input
-                  type="text"
-                  value={tel1}
-                  onChange={e => setTel1(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Secondary Telephone Line</label>
-                <input
-                  type="text"
-                  value={tel2}
-                  onChange={e => setTel2(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
-                />
-              </div>
-
-               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Active Term Context</label>
-                <select
-                  value={term}
-                  onChange={e => setTerm(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
-                >
-                  {TERMS.map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Active Calendar Year</label>
-                <input
-                  type="number"
-                  value={year}
-                  onChange={e => setYear(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
-                />
-              </div>
-
-              <div className="md:col-span-2 border-t border-slate-100 pt-4 mt-2 space-y-4">
-                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Active Term Configuration & Schedule</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">Term Start Date</label>
-                    <input
-                      type="date"
-                      value={termStartDate}
-                      onChange={e => setTermStartDate(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">Term End Date</label>
-                    <input
-                      type="date"
-                      value={termEndDate}
-                      onChange={e => setTermEndDate(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
-                    />
-                  </div>
+          <div className="space-y-6 animate-in fade-in duration-200">
+            <form onSubmit={handleSaveGeneral} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6">
+              <h3 className="text-sm font-bold text-slate-950 pb-2 border-b border-slate-100">School Profile Headers</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Official School Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={schoolName}
+                    onChange={e => setSchoolName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
+                  />
                 </div>
 
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <h5 className="text-xs font-bold text-slate-950">Auto-register Standard Examination Papers</h5>
-                    <p className="text-[10px] text-slate-500 font-medium">Quickly register BOT, MOT, and EOT exam papers with all class streams auto-selected for {term}.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleAutoAddExamSets(term)}
-                    className="px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap"
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Short Code Name (Sidebar Display)</label>
+                  <input
+                    type="text"
+                    required
+                    value={shortName}
+                    onChange={e => setShortName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">School Motto Slogan</label>
+                  <input
+                    type="text"
+                    value={motto}
+                    onChange={e => setMotto(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Postal / Physical Address</label>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={e => setAddress(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Primary Telephone Line</label>
+                  <input
+                    type="text"
+                    value={tel1}
+                    onChange={e => setTel1(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Secondary Telephone Line</label>
+                  <input
+                    type="text"
+                    value={tel2}
+                    onChange={e => setTel2(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
+                  />
+                </div>
+
+                 <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Active Term Context</label>
+                  <select
+                    value={term}
+                    onChange={e => setTerm(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
                   >
-                    Auto-Add & Select All Exams
-                  </button>
+                    {TERMS.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Active Calendar Year</label>
+                  <input
+                    type="number"
+                    value={year}
+                    onChange={e => setYear(Number(e.target.value))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
+                  />
+                </div>
+
+                <div className="md:col-span-2 border-t border-slate-100 pt-4 mt-2 space-y-4">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Active Term Configuration & Schedule</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">Term Start Date</label>
+                      <input
+                        type="date"
+                        value={termStartDate}
+                        onChange={e => setTermStartDate(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">Term End Date</label>
+                      <input
+                        type="date"
+                        value={termEndDate}
+                        onChange={e => setTermEndDate(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <h5 className="text-xs font-bold text-slate-950">Auto-register Standard Examination Papers</h5>
+                      <p className="text-[10px] text-slate-500 font-medium">Quickly register BOT, MOT, and EOT exam papers with all class streams auto-selected for {term}.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAutoAddExamSets(term)}
+                      className="px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      Auto-Add & Select All Exams
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Head Teacher's Name</label>
+                  <input
+                    type="text"
+                    value={headTeacherName}
+                    onChange={e => setHeadTeacherName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Head Teacher's Initials</label>
+                  <input
+                    type="text"
+                    value={headTeacherInitials}
+                    onChange={e => setHeadTeacherInitials(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Head Teacher's Name</label>
-                <input
-                  type="text"
-                  value={headTeacherName}
-                  onChange={e => setHeadTeacherName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
-                />
+                <label className="block text-xs font-bold text-slate-600 mb-1.5">Official School Logo Badge</label>
+                <div className="flex items-center gap-4">
+                  {logo && (
+                    <div className="w-16 h-16 border border-slate-200 rounded-xl overflow-hidden p-1 shrink-0 bg-white shadow-xs">
+                      <img src={logo} alt="School logo preview" className="w-full h-full object-contain" />
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    className="block text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
+                  />
+                </div>
               </div>
 
+              <button
+                type="submit"
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-blue-600/10"
+              >
+                Save School General Details
+              </button>
+            </form>
+
+            <form onSubmit={handleSaveGeneral} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6">
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Head Teacher's Initials</label>
-                <input
-                  type="text"
-                  value={headTeacherInitials}
-                  onChange={e => setHeadTeacherInitials(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-semibold focus:bg-white"
+                <h3 className="text-lg font-bold text-slate-800">AI Configuration (Gemini API)</h3>
+                <p className="text-sm text-slate-500 mt-1">Provide your own Google Gemini API key to enable local AI generation without requiring a backend server. Your key is stored securely in your local browser database.</p>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Gemini API Key</label>
+                <input 
+                  type="password"
+                  value={geminiApiKey} 
+                  onChange={e => setGeminiApiKey(e.target.value)} 
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono"
+                  placeholder="AIzaSy..."
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1.5">Official School Logo Badge</label>
-              <div className="flex items-center gap-4">
-                {logo && (
-                  <div className="w-16 h-16 border border-slate-200 rounded-xl overflow-hidden p-1 shrink-0 bg-white shadow-xs">
-                    <img src={logo} alt="School logo preview" className="w-full h-full object-contain" />
-                  </div>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleLogoUpload}
-                  className="block text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-blue-600/10"
-            >
-              Save School General Details
-            </button>
-          </form>
-
-          <form onSubmit={handleSaveGeneral} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6 mt-6">
-            <div>
-              <h3 className="text-lg font-bold text-slate-800">AI Configuration (Gemini API)</h3>
-              <p className="text-sm text-slate-500 mt-1">Provide your own Google Gemini API key to enable local AI generation without requiring a backend server. Your key is stored securely in your local browser database.</p>
-            </div>
-            
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">Gemini API Key</label>
-              <input 
-                type="password"
-                value={geminiApiKey} 
-                onChange={e => setGeminiApiKey(e.target.value)} 
-                className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono"
-                placeholder="AIzaSy..."
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-600/10"
-            >
-              Save AI Configuration
-            </button>
-          </form>
+              <button
+                type="submit"
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-600/10"
+              >
+                Save AI Configuration
+              </button>
+            </form>
+          </div>
         )}
 
         {/* TAB 2: UNEB PLE Compulsory Override parameters */}
