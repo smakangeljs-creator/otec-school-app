@@ -174,3 +174,47 @@ GUIDELINES:
     throw new functions.https.HttpsError('internal', err.message || 'Failed to process chat response.');
   }
 });
+
+export const generateAppraisalFeedback = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be logged in to use AI.');
+  }
+
+  const { staffName, role, department, score, maxScore } = data;
+  const ai = getGenAI();
+
+  const systemInstruction = `You are an expert HR Performance Assessor in an educational institution.
+You are writing a concise, professional performance appraisal report for a staff member based on their numerical score and their specific department/role.
+Your response MUST be a JSON object with two fields:
+1. "comments": A 2-3 sentence performance summary focusing on the specific areas/words relevant to their department (e.g., if they are in "Mathematics", mention analytical skills and student engagement; if "Cleaning", mention hygiene standards and diligence).
+2. "recommendations": A 1-2 sentence recommended action or course for improvement based on their score.`;
+
+  const prompt = `Staff Name: ${staffName}
+Role: ${role}
+Department/Specialization: ${department || 'General'}
+Performance Score: ${score} out of ${maxScore || 100}
+
+Please generate the appraisal JSON object.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-1.5-flash',
+      contents: prompt,
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+        responseMimeType: "application/json",
+      }
+    });
+    
+    let result = response.text?.trim() || '{}';
+    if (result.startsWith('\`\`\`json')) {
+      result = result.replace(/^\`\`\`json\n/, '').replace(/\n\`\`\`$/, '');
+    }
+    
+    return JSON.parse(result);
+  } catch (err: any) {
+    console.error('AI Appraisal Error:', err);
+    throw new functions.https.HttpsError('internal', err.message || 'Failed to generate AI appraisal.');
+  }
+});

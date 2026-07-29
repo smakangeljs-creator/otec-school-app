@@ -1,10 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { AppData, Teacher, NonTeachingStaff, PayrollRecord, AppraisalRecord } from '../types';
+import { AppData, Teacher, NonTeachingStaff, PayrollRecord, AppraisalRecord, TeacherAppraisalMetrics } from '../types';
 import { calculatePayroll, calculateGrossFromNet } from '../lib/payroll';
 import { 
   Users, Briefcase, Cake, CalendarClock, DollarSign, Award, CheckCircle, 
-  Search, Filter, Plus, FileText, ChevronDown, Download, X
+  Search, Filter, Plus, FileText, ChevronDown, Download, X, Sparkles, Printer
 } from 'lucide-react';
+import app from '../lib/firebase';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import DataTable, { ColumnDef } from './ui/DataTable';
 
 interface HRManagerProps {
@@ -26,6 +28,16 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
   const [appraisalComments, setAppraisalComments] = useState('');
   const [appraisalEvaluator, setAppraisalEvaluator] = useState('');
   const [appraisalDate, setAppraisalDate] = useState(new Date().toISOString().split('T')[0]);
+  const [appraisalRecommendations, setAppraisalRecommendations] = useState('');
+  
+  const initialMetrics: TeacherAppraisalMetrics = {
+    classroomEnvironment: 0, learnersBook: 0, useOfBlackboard: 0, handwriting: 0,
+    classroomControl: 0, rules: 0, recordOfWork: 0, schemeOfWork: 0, attendanceRecord: 0
+  };
+  const [appraisalMetrics, setAppraisalMetrics] = useState<TeacherAppraisalMetrics>(initialMetrics);
+  
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [viewAppraisal, setViewAppraisal] = useState<AppraisalRecord | null>(null);
 
   const [editDOB, setEditDOB] = useState('');
   const [editContractEnd, setEditContractEnd] = useState('');
@@ -118,17 +130,85 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
     const updatedPayroll = currentPayroll.filter(p => p.month !== month).concat(newPayrollRecords);
     onUpdateHR(updatedPayroll, data.hr?.appraisals || []);
   };
+  const handleGenerateAppraisal = async () => {
+    if (!appraisalStaffId || !appraisalScore) {
+      alert("Please select a staff member and enter a score first.");
+      return;
+    }
+    
+    setIsGeneratingAI(true);
+    
+    // Find staff details
+    const isTeacher = data.settings?.teachers?.some(t => t.id === appraisalStaffId);
+    let staffName = '';
+    let role = isTeacher ? 'Teacher' : 'Non-Teaching Staff';
+    let department = 'General';
+    
+    if (isTeacher) {
+      const teacher = data.settings?.teachers?.find(t => t.id === appraisalStaffId);
+      staffName = teacher?.name || 'Unknown';
+      department = teacher?.specialization || 'Teaching';
+    } else {
+      const nts = data.settings?.nonTeachingStaff?.find(s => s.id === appraisalStaffId);
+      staffName = nts?.name || 'Unknown';
+      department = nts?.department || 'Support';
+    }
+    
+    try {
+      const functions = getFunctions(app);
+      const generateAppraisalFeedback = httpsCallable(functions, 'generateAppraisalFeedback');
+      
+      const response = await generateAppraisalFeedback({
+        staffName,
+        role,
+        department,
+        score: Number(appraisalScore),
+        maxScore: 100
+      });
+      
+      const resData = response.data as { comments: string, recommendations: string };
+      
+      if (resData.comments) {
+        setAppraisalComments(resData.comments);
+      }
+      if (resData.recommendations) {
+        setAppraisalRecommendations(resData.recommendations);
+      }
+      
+      const customEvent = new CustomEvent('otec-toast', { detail: { message: 'AI Appraisal Generated!', type: 'success' }});
+      window.dispatchEvent(customEvent);
+    } catch (err) {
+      console.error("Failed to generate AI appraisal:", err);
+      const customEvent = new CustomEvent('otec-toast', { detail: { message: 'Failed to connect to AI server. Check connection or deploy Firebase functions.', type: 'error' }});
+      window.dispatchEvent(customEvent);
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
 
   const handleAddAppraisal = () => {
     if (!appraisalStaffId || !appraisalScore) return;
     
+    const isTeacher = data.settings?.teachers?.some(t => t.id === appraisalStaffId);
+    let department = 'General';
+    if (isTeacher) {
+      department = data.settings?.teachers?.find(t => t.id === appraisalStaffId)?.specialization || 'Teaching';
+    } else {
+      department = data.settings?.nonTeachingStaff?.find(t => t.id === appraisalStaffId)?.department || 'Support';
+    }
+    
     const newAppraisal: AppraisalRecord = {
       id: `AP-${Date.now()}`,
       staffId: appraisalStaffId,
+      staffType: isTeacher ? 'teacher' : 'non-teaching',
       score: Number(appraisalScore),
       comments: appraisalComments,
+      recommendations: appraisalRecommendations,
       evaluator: appraisalEvaluator,
-      date: appraisalDate
+      date: appraisalDate,
+      department: department,
+      ...(isTeacher ? { metrics: appraisalMetrics } : {})
     };
     
     const updatedAppraisals = [...(data.hr?.appraisals || []), newAppraisal];
@@ -138,6 +218,7 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
     setAppraisalStaffId('');
     setAppraisalScore('');
     setAppraisalComments('');
+    setAppraisalRecommendations('');
   };
 
   const handleAddStaff = (e: React.FormEvent) => {
@@ -524,6 +605,7 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
                           <th className="px-4 py-3 font-semibold text-slate-700">Evaluator</th>
                           <th className="px-4 py-3 font-semibold text-slate-700 text-center">Score</th>
                           <th className="px-4 py-3 font-semibold text-slate-700">Comments</th>
+                          <th className="px-4 py-3 font-semibold text-slate-700 text-right">Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -540,6 +622,14 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-slate-600 text-xs max-w-xs truncate" title={app.comments}>{app.comments}</td>
+                              <td className="px-4 py-3 text-right">
+                                <button 
+                                  onClick={() => setViewAppraisal(app)}
+                                  className="px-3 py-1 bg-blue-50 text-blue-600 font-semibold rounded-md text-xs hover:bg-blue-100"
+                                >
+                                  View Report
+                                </button>
+                              </td>
                             </tr>
                           );
                         })}
@@ -694,71 +784,112 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
         const staff = allStaff.find(s => s.id === printingContractId);
         if (!staff) return null;
         
+        const payroll = calculatePayroll(staff.baseSalary || 0);
+        
         return (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:p-0 print:bg-white print:static">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col h-[90vh] print:h-auto print:shadow-none print:w-full">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col h-[95vh] print:h-auto print:shadow-none print:w-full">
               <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 print:hidden shrink-0">
-                <h3 className="font-bold text-slate-800">Print Appointment Letter</h3>
+                <h3 className="font-bold text-slate-800">Print Employment Contract</h3>
                 <div className="flex gap-2">
-                  <button 
-                    onClick={() => window.print()}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors"
-                  >
-                    Print
+                  <button onClick={() => window.print()} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors">
+                    Print Contract
                   </button>
-                  <button 
-                    onClick={() => setPrintingContractId(null)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
-                  >
+                  <button onClick={() => setPrintingContractId(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
                     <X size={18} />
                   </button>
                 </div>
               </div>
               
-              <div className="p-8 overflow-y-auto flex-1 bg-white print:overflow-visible text-sm text-slate-800">
+              <div className="p-10 overflow-y-auto flex-1 bg-white print:p-0 print:overflow-visible text-sm text-slate-800 font-serif leading-relaxed">
                 <div className="text-center border-b-2 border-slate-800 pb-4 mb-6">
-                  <h1 className="text-2xl font-black uppercase">{data.settings?.schoolName || 'Otec School'}</h1>
-                  <p className="text-xs font-medium text-slate-500 mt-1">{data.settings?.schoolAddress || 'Kampala, Uganda'}</p>
+                  <h1 className="text-2xl font-black uppercase tracking-wider">{data.settings?.schoolName || 'Otec School'}</h1>
+                  <p className="text-xs font-medium text-slate-600 mt-1">{data.settings?.schoolAddress || 'Kampala, Uganda'} | EMPLOYMENT CONTRACT</p>
                 </div>
                 
-                <div className="flex justify-between mb-8">
-                  <div>
-                    <p className="font-bold">To:</p>
-                    <p className="text-lg font-black">{staff.name}</p>
-                    <p className="font-medium text-slate-600">ID: {staff.id}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold">Date:</p>
-                    <p>{new Date().toLocaleDateString()}</p>
-                  </div>
-                </div>
+                <h2 className="text-center text-lg font-bold uppercase underline mb-8">Contract of Employment</h2>
 
-                <div className="space-y-4 text-justify leading-relaxed">
-                  <h2 className="text-lg font-black underline uppercase text-center mb-6">Letter of Appointment</h2>
-                  
-                  <p>Dear <strong>{staff.name}</strong>,</p>
-                  
-                  <p>
-                    We are pleased to offer you the position of <strong>{staff.staffType === 'teacher' ? 'Teacher' : (staff as any).department || 'Staff'}</strong> at {data.settings?.schoolName || 'the School'}. 
-                    This letter constitutes the formal terms of your employment, which will commence on {staff.dateOfJoining || 'your first day of work'}.
-                  </p>
-                  
-                  <p><strong>1. Remuneration:</strong> Your starting basic salary will be <strong>UGX {staff.baseSalary ? staff.baseSalary.toLocaleString() : '___________'}</strong> per month. Payment will be made subject to statutory deductions including PAYE and NSSF.</p>
-                  
-                  <p><strong>2. Term of Employment:</strong> This contract is valid until <strong>{staff.contractEndDate || '___________'}</strong>, subject to satisfactory performance appraisals and school policies.</p>
-                  
-                  <p><strong>3. Duties and Responsibilities:</strong> You are expected to perform the duties associated with your role diligently and to adhere to the professional code of conduct of the institution at all times.</p>
-                  
-                  <p>Please sign and return a copy of this letter to the Human Resources office as indication of your acceptance of these terms.</p>
-                  
-                  <div className="mt-16 flex justify-between px-10">
-                    <div className="text-center">
-                      <div className="w-48 border-b border-slate-400 mb-2"></div>
-                      <p className="font-bold text-xs uppercase">Employer's Signature</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="w-48 border-b border-slate-400 mb-2"></div>
-                      <p className="font-bold text-xs uppercase">Employee's Signature</p>
+                <p className="mb-4 text-justify">
+                  This Contract of Employment is made and entered into on this <strong>{new Date().toLocaleDateString()}</strong> in accordance with the Employment Act, 2006 of the Republic of Uganda.
+                </p>
+                
+                <p className="mb-6 text-justify">
+                  <strong>BETWEEN</strong> {data.settings?.schoolName || 'The School'} (hereinafter referred to as the "Employer") 
+                  <strong> AND </strong> <strong>{staff.name}</strong> (hereinafter referred to as the "Employee").
+                </p>
+
+                <div className="space-y-4 text-justify">
+                  <div>
+                    <h3 className="font-bold">1. Position and Type of Contract</h3>
+                    <p>The Employee is engaged in the position of <strong>{staff.staffType === 'teacher' ? 'Teacher' : (staff as any).department || 'Staff'}</strong>.</p>
+                    <p>This is a <strong>Renewable Fixed-Term Contract</strong> valid for a period of <strong>1 Year</strong>, commencing on <strong>{staff.dateOfJoining || '________________'}</strong> and expiring on <strong>{staff.contractEndDate || '________________'}</strong>.</p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold">2. Probationary Period</h3>
+                    <p>The Employee shall serve a probationary period of <strong>Three (3) to Six (6) months</strong>. During this period, either party may terminate the contract by giving a 14-day notice.</p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold">3. Remuneration and Statutory Deductions</h3>
+                    <p>The Employer shall pay the Employee a monthly consolidated salary as follows:</p>
+                    <table className="w-full mt-2 mb-2 border-collapse border border-slate-300 text-sm">
+                      <tbody>
+                        <tr>
+                          <td className="border border-slate-300 p-2 font-medium">Gross Monthly Salary</td>
+                          <td className="border border-slate-300 p-2 text-right">UGX {payroll.grossPay.toLocaleString()}</td>
+                        </tr>
+                        <tr>
+                          <td className="border border-slate-300 p-2 text-slate-600">Less: NSSF Employee Contribution (5%)</td>
+                          <td className="border border-slate-300 p-2 text-right text-rose-600">- UGX {payroll.nssfEmployee.toLocaleString()}</td>
+                        </tr>
+                        <tr>
+                          <td className="border border-slate-300 p-2 text-slate-600">Less: P.A.Y.E (Uganda Revenue Authority)</td>
+                          <td className="border border-slate-300 p-2 text-right text-rose-600">- UGX {payroll.paye.toLocaleString()}</td>
+                        </tr>
+                        <tr className="bg-slate-50 font-bold">
+                          <td className="border border-slate-300 p-2">Net Take-Home Pay</td>
+                          <td className="border border-slate-300 p-2 text-right">UGX {payroll.netPay.toLocaleString()}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p className="text-xs text-slate-500 italic mt-1">*Note: The Employer shall separately remit the mandatory 10% NSSF Employer contribution (UGX {payroll.nssfEmployer.toLocaleString()}) on behalf of the Employee.</p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold">4. Allowances & Benefits</h3>
+                    <p>In addition to the basic salary, the Employee is entitled to the following benefits (to be filled by administration):</p>
+                    <ul className="list-disc pl-8 mt-2 space-y-2">
+                      <li>Meals during working hours: ____________________</li>
+                      <li>Housing/Accommodation: ____________________</li>
+                      <li>Medical/Health cover: ____________________</li>
+                      <li>Other: _____________________________________</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold">5. Hours of Work & Leave</h3>
+                    <p>Standard working hours are governed by the school timetable. The Employee is entitled to annual leave of 21 working days per calendar year (typically taken during school term holidays), as well as sick leave and maternity/paternity leave strictly in accordance with the Employment Act, 2006.</p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold">6. Termination</h3>
+                    <p>Post-probation, either party may terminate this agreement by providing a written notice of at least One (1) month, or payment of one month's salary in lieu of notice. Summary dismissal may occur without notice in cases of gross misconduct.</p>
+                  </div>
+
+                  <div className="pt-8">
+                    <p className="font-bold italic mb-6">By signing below, both parties agree to the terms and conditions set forth above.</p>
+                    <div className="grid grid-cols-2 gap-12 mt-12">
+                      <div className="text-center">
+                        <div className="border-b border-slate-600 mb-2 h-8"></div>
+                        <p className="font-bold text-xs uppercase">For the Employer</p>
+                        <p className="text-xs text-slate-500 mt-1">Date: ________________</p>
+                      </div>
+                      <div className="text-center">
+                        <div className="border-b border-slate-600 mb-2 h-8"></div>
+                        <p className="font-bold text-xs uppercase">The Employee ({staff.name})</p>
+                        <p className="text-xs text-slate-500 mt-1">Date: ________________</p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -881,25 +1012,7 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
             
             <form onSubmit={(e) => {
               e.preventDefault();
-              if (!appraisalStaffId || !appraisalScore || !appraisalEvaluator) return;
-              
-              const isTeacher = data.settings?.teachers.some(t => t.id === appraisalStaffId);
-              const newAppraisal: AppraisalRecord = {
-                id: 'appr-' + Math.random().toString(36).substr(2, 9),
-                staffId: appraisalStaffId,
-                staffType: isTeacher ? 'teacher' : 'non-teaching',
-                date: appraisalDate,
-                evaluator: appraisalEvaluator,
-                score: Number(appraisalScore),
-                comments: appraisalComments
-              };
-              
-              onUpdateHR(data.hr?.payroll || [], [...(data.hr?.appraisals || []), newAppraisal]);
-              setShowAppraisalModal(false);
-              setAppraisalStaffId('');
-              setAppraisalScore('');
-              setAppraisalComments('');
-              setAppraisalEvaluator('');
+              handleAddAppraisal();
             }} className="p-6 space-y-4">
               
               <div>
@@ -920,30 +1033,82 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Date</label>
-                  <input 
-                    type="date"
-                    required
-                    value={appraisalDate}
-                    onChange={e => setAppraisalDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Score (0-100)</label>
-                  <input 
-                    type="number"
-                    required
-                    min="0" max="100"
-                    value={appraisalScore}
-                    onChange={e => setAppraisalScore(e.target.value)}
-                    placeholder="e.g. 85"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
+              {appraisalStaffId && (
+                (() => {
+                  const isTeacher = data.settings?.teachers.some(t => t.id === appraisalStaffId);
+                  
+                  // Helper to update metric
+                  const updateMetric = (key: keyof TeacherAppraisalMetrics, val: string) => {
+                    const num = Number(val) || 0;
+                    const updated = { ...appraisalMetrics, [key]: num };
+                    setAppraisalMetrics(updated);
+                    // auto calculate overall score out of 100
+                    const total = Object.values(updated).reduce((a, b) => a + b, 0);
+                    // max possible is 90 (9 metrics * 10 max points)
+                    setAppraisalScore(Math.round((total / 90) * 100).toString());
+                  };
+                  
+                  return (
+                    <div className="space-y-4">
+                      {isTeacher ? (
+                        <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+                          <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-2">
+                            <h4 className="text-xs font-bold text-slate-800">Teacher Metrics (Out of 10)</h4>
+                            <span className="text-xs font-black text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                              Auto-Score: {appraisalScore || 0}%
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-1">
+                            {[
+                              { key: 'classroomEnvironment', label: 'Class Environment' },
+                              { key: 'learnersBook', label: "Learners' Book" },
+                              { key: 'useOfBlackboard', label: 'Use of Blackboard' },
+                              { key: 'handwriting', label: 'Handwriting' },
+                              { key: 'classroomControl', label: 'Class Control & Rules' },
+                              { key: 'recordOfWork', label: 'Record of Work' },
+                              { key: 'schemeOfWork', label: 'Scheme of Work' },
+                              { key: 'attendanceRecord', label: 'Attendance Record' }
+                            ].map(metric => (
+                              <div key={metric.key} className="flex items-center justify-between bg-white px-2 py-1.5 border border-slate-200 rounded-lg">
+                                <label className="text-[10px] font-bold text-slate-600 truncate mr-2 flex-1" title={metric.label}>
+                                  {metric.label}
+                                </label>
+                                <input 
+                                  type="number" min="0" max="10" required
+                                  value={appraisalMetrics[metric.key as keyof TeacherAppraisalMetrics] || ''}
+                                  onChange={e => updateMetric(metric.key as keyof TeacherAppraisalMetrics, e.target.value)}
+                                  className="w-12 px-1 py-1 bg-slate-50 border border-slate-200 rounded text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">Score (0-100)</label>
+                            <input 
+                              type="number" required min="0" max="100"
+                              value={appraisalScore} onChange={e => setAppraisalScore(e.target.value)}
+                              placeholder="e.g. 85"
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Date</label>
+                        <input 
+                          type="date" required value={appraisalDate}
+                          onChange={e => setAppraisalDate(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Evaluator Name</label>
@@ -958,13 +1123,35 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Comments / Notes</label>
+                <div className="flex justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-600">Comments / Notes</label>
+                  <button 
+                    type="button" 
+                    onClick={handleGenerateAppraisal}
+                    disabled={isGeneratingAI || !appraisalStaffId || !appraisalScore}
+                    className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                  >
+                    {isGeneratingAI ? <span className="animate-spin text-lg leading-none">⚙</span> : <Sparkles size={12} />}
+                    {isGeneratingAI ? 'Generating...' : 'Auto-Generate AI Feedback'}
+                  </button>
+                </div>
                 <textarea 
                   required
                   rows={3}
                   value={appraisalComments}
                   onChange={e => setAppraisalComments(e.target.value)}
                   placeholder="Enter evaluation notes, areas of improvement..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">Recommendations for Improvement</label>
+                <textarea 
+                  rows={2}
+                  value={appraisalRecommendations}
+                  onChange={e => setAppraisalRecommendations(e.target.value)}
+                  placeholder="e.g. Needs to improve punctuality and student engagement."
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
               </div>
@@ -1079,6 +1266,153 @@ export default function HRManager({ data, onUpdateHR, onUpdateStaff }: HRManager
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Appraisal Modal & Printable Report */}
+      {viewAppraisal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:p-0 print:bg-white print:backdrop-blur-none">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200 print:shadow-none print:max-w-none print:w-full print:h-full print:max-h-none print:overflow-visible">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 print:hidden">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <Award size={18} className="text-blue-600" />
+                Performance Appraisal Report
+              </h3>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg text-sm flex items-center gap-1 transition-colors"
+                >
+                  <Printer size={16} /> Print
+                </button>
+                <button 
+                  onClick={() => setViewAppraisal(null)}
+                  className="text-slate-400 hover:text-rose-500 transition-colors p-1"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            
+            {/* Printable Area */}
+            <div className="p-8 print:p-0">
+              {/* School Header for Print */}
+              <div className="hidden print:flex flex-col items-center justify-center mb-8 pb-6 border-b-2 border-slate-800">
+                <h1 className="text-3xl font-black text-slate-900 uppercase tracking-wider">{data.settings?.schoolName || 'School Name'}</h1>
+                <h2 className="text-xl font-bold text-slate-700 mt-1">STAFF PERFORMANCE APPRAISAL REPORT</h2>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-6 mb-8">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Staff Member</h4>
+                  <p className="text-lg font-bold text-slate-800">
+                    {(() => {
+                      const staff = [...(data.settings?.teachers || []), ...(data.settings?.nonTeachingStaff || [])].find(s => s.id === viewAppraisal.staffId);
+                      return staff ? staff.name : 'Unknown';
+                    })()}
+                  </p>
+                  <p className="text-sm text-slate-600">{viewAppraisal.department || (viewAppraisal.staffType === 'teacher' ? 'Teaching Staff' : 'Support Staff')}</p>
+                </div>
+                <div className="text-right">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Appraisal Details</h4>
+                  <p className="text-slate-800 font-medium">Date: {new Date(viewAppraisal.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  <p className="text-slate-600 text-sm">Evaluator: {viewAppraisal.evaluator}</p>
+                </div>
+              </div>
+
+              <div className="mb-8 p-6 bg-slate-50 rounded-xl border border-slate-100 print:bg-transparent print:border-slate-300">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-slate-800 text-lg">Overall Score</h3>
+                  <div className={`px-4 py-2 rounded-lg font-black text-xl print:border print:border-slate-300 ${
+                    viewAppraisal.score >= 80 ? 'bg-emerald-100 text-emerald-700' : 
+                    viewAppraisal.score >= 50 ? 'bg-amber-100 text-amber-700' : 
+                    'bg-rose-100 text-rose-700'
+                  }`}>
+                    {viewAppraisal.score}%
+                  </div>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-3 print:border print:border-slate-300">
+                  <div 
+                    className={`h-3 rounded-full print:bg-slate-500 ${
+                      viewAppraisal.score >= 80 ? 'bg-emerald-500' : 
+                      viewAppraisal.score >= 50 ? 'bg-amber-500' : 
+                      'bg-rose-500'
+                    }`} 
+                    style={{ width: `${Math.min(100, Math.max(0, viewAppraisal.score))}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              {viewAppraisal.metrics && (
+                <div className="mb-8">
+                  <h4 className="font-bold text-slate-800 text-base mb-3 border-b border-slate-100 pb-2 print:border-slate-300">Detailed Teacher Metrics</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {[
+                      { key: 'classroomEnvironment', label: 'Class Environment' },
+                      { key: 'learnersBook', label: "Learners' Book" },
+                      { key: 'useOfBlackboard', label: 'Use of Blackboard' },
+                      { key: 'handwriting', label: 'Handwriting' },
+                      { key: 'classroomControl', label: 'Class Control' },
+                      { key: 'rules', label: 'Rules' },
+                      { key: 'recordOfWork', label: 'Record of Work' },
+                      { key: 'schemeOfWork', label: 'Scheme of Work' },
+                      { key: 'attendanceRecord', label: 'Attendance Record' }
+                    ].map(metric => {
+                      const val = viewAppraisal.metrics![metric.key as keyof TeacherAppraisalMetrics] || 0;
+                      return (
+                        <div key={metric.key} className="bg-white border border-slate-200 p-3 rounded-lg print:border-slate-300">
+                          <div className="text-xs text-slate-500 font-bold uppercase mb-1 truncate" title={metric.label}>{metric.label}</div>
+                          <div className="flex items-end gap-1">
+                            <span className="text-xl font-black text-slate-800">{val}</span>
+                            <span className="text-xs font-bold text-slate-400 mb-1">/ 10</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-6">
+                <div>
+                  <h4 className="font-bold text-slate-800 text-base mb-2 border-b border-slate-100 pb-2 print:border-slate-300">Performance Summary & Comments</h4>
+                  <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{viewAppraisal.comments}</p>
+                </div>
+
+                {viewAppraisal.recommendations && (
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-base mb-2 border-b border-slate-100 pb-2 print:border-slate-300 flex items-center gap-2">
+                      <Sparkles size={16} className="text-blue-500 print:hidden" />
+                      AI Recommended Action Plan
+                    </h4>
+                    <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 print:bg-transparent print:border-0 print:p-0">
+                      <p className="text-slate-700 whitespace-pre-wrap leading-relaxed italic">{viewAppraisal.recommendations}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-16 pt-8 grid grid-cols-2 gap-12 print:block">
+                <div className="print:inline-block print:w-[45%]">
+                  <div className="border-t border-slate-400 pt-2">
+                    <p className="font-bold text-slate-800 text-center">{viewAppraisal.evaluator}</p>
+                    <p className="text-xs text-slate-500 uppercase tracking-wider text-center">Evaluator Signature</p>
+                  </div>
+                </div>
+                <div className="print:inline-block print:w-[45%] print:float-right">
+                  <div className="border-t border-slate-400 pt-2">
+                    <p className="font-bold text-slate-800 text-center">
+                      {(() => {
+                        const staff = [...(data.settings?.teachers || []), ...(data.settings?.nonTeachingStaff || [])].find(s => s.id === viewAppraisal.staffId);
+                        return staff ? staff.name : '______________________';
+                      })()}
+                    </p>
+                    <p className="text-xs text-slate-500 uppercase tracking-wider text-center">Staff Signature</p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
       )}

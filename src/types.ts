@@ -122,6 +122,18 @@ export interface PayrollRecord {
   paymentDate?: string;
 }
 
+export interface TeacherAppraisalMetrics {
+  classroomEnvironment: number;
+  learnersBook: number;
+  useOfBlackboard: number;
+  handwriting: number;
+  classroomControl: number;
+  rules: number;
+  recordOfWork: number;
+  schemeOfWork: number;
+  attendanceRecord: number;
+}
+
 export interface AppraisalRecord {
   id: string;
   staffId: string;
@@ -130,6 +142,9 @@ export interface AppraisalRecord {
   evaluator: string;
   score: number; // e.g. out of 100
   comments: string;
+  recommendations?: string;
+  department?: string;
+  metrics?: TeacherAppraisalMetrics;
 }
 
 export interface HRData {
