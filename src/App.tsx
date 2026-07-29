@@ -388,7 +388,7 @@ export default function App() {
             onUpdateHR={(payroll, appraisals) => {
               const updatedData = { ...data, hr: { payroll, appraisals } };
               setData(updatedData);
-              dataManager.saveData(updatedData);
+              dataManager.setData(updatedData);
               addToast("HR data updated successfully", 'success');
             }}
             onUpdateStaff={(teachers, nonTeachingStaff) => {
@@ -401,7 +401,7 @@ export default function App() {
                  } 
                };
                setData(updatedData);
-               dataManager.saveData(updatedData);
+               dataManager.setData(updatedData);
                addToast("Staff directory updated successfully", 'success');
             }}
           />

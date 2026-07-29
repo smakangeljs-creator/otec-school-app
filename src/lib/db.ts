@@ -21,12 +21,20 @@ const LOCAL_STORAGE_KEY = 'otec_report_card_data';
 const DB_NAME = 'OTEC_Database';
 const STORE_NAME = 'app_data';
 
+let cachedDB: IDBDatabase | null = null;
+
 const getDB = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
+  if (cachedDB) {
+    return resolve(cachedDB);
+  }
   const request = indexedDB.open(DB_NAME, 1);
   request.onupgradeneeded = (e) => {
     (e.target as IDBOpenDBRequest).result.createObjectStore(STORE_NAME);
   };
-  request.onsuccess = () => resolve(request.result);
+  request.onsuccess = () => {
+    cachedDB = request.result;
+    resolve(cachedDB);
+  };
   request.onerror = () => reject(request.error);
 });
 
